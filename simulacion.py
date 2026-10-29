@@ -91,22 +91,24 @@ sys.path.insert(0, str(next(p / "motor_comun" for p in Path(__file__).resolve().
                             if (p / "motor_comun" / "triage_core").exists())))
 
 from triage_core.collections_calibration import Calibration, Outcome, RiskCalibration, fit, fit_risk
-from triage_core.collections_decision import (DISCOUNT, REMIND, WAIT, CashNeed, Invoice, ReceivablesPolicy,
+from triage_core.collections_decision import (DISCOUNT, PLAN, REMIND, WAIT, CashNeed, Invoice, ReceivablesPolicy,
                                               plan_collections)
 from triage_core.collections_model import CollectionsModel, PaidInvoice
 from triage_core.policy import SIGNAL_LIKELIHOOD
 
 LIFT_RECORDATORIO, LIFT_DESCUENTO, P_DISPUTA_PAGA = 1.4, 2.5, 0.05
+LIFT_PLAN = 2.0          # de verdad, un plan de pagos ayuda algo menos de lo que supone la política (x3)
 P_VENCIDA = 0.6          # ya vencida: le cuesta más pagar ahora (la política supone algo parecido, odds x0,5)
 APRENDER_CADA = 20       # semanas entre reajustes de lo aprendido
 RETRASO_HISTORIAL = 5    # semanas hasta que una factura pagada entra en el historial (ya han llegado las tardías)
 INICIO = date(2026, 1, 1)  # fecha de la semana 0 (solo para fechar las facturas que entran en el historial)
 AGENTES = ("Receivables Copilot", "Copilot without replies", "PayPal fixed reminders", "Discount everyone",
-           "Do nothing", "Copilot, no learning", "Copilot, history fixed")
+           "Do nothing", "Copilot, no learning", "Copilot, history fixed", "Copilot, no payment plans")
 # Agentes que aprenden: ¿leen las respuestas?, qué cambia en su política, ¿aprenden también de las disputas?,
 # ¿revisan su riesgo semanal? y ¿crece el historial de cada cliente?
 APRENDEN = {"Receivables Copilot": (True, {}, True, True, True), "Copilot without replies": (False, {}, True, True, True),
-            "Copilot, history fixed": (True, {}, True, True, False)}
+            "Copilot, history fixed": (True, {}, True, True, False),
+            "Copilot, no payment plans": (True, {"payment_plans": False}, True, True, True)}
 RESULTADOS = Path(__file__).with_name("resultados")
 
 # Fijadas el 28-oct-2026 por la tarde, DESPUÉS de desarrollar con las semillas ya usadas (2030 y 2031) y ANTES de
@@ -152,6 +154,17 @@ HIPOTESIS_TANDA6 = {
     "H28": "Cuesta menos por semana que los recordatorios fijos (IC por debajo de 0)",
     "H29": "El riesgo que prevé cuadra con el real (el IC 95 % de previsto - se quedó corto incluye el 0)",
     "H30": "Se mantienen H2 y H4: menos recordatorios que el calendario fijo y nunca presiona a quien disputa",
+}
+
+# Fijadas el 29-oct-2026 por la mañana, ANTES de ejecutar nada con planes de pago, para las semillas nuevas 2042 y
+# 2043. Cada una tiene que cumplirse en las dos. De verdad, un plan ayuda menos de lo que supone la política (x2 y x3)
+HIPOTESIS_TANDA7 = {
+    "H31": "De las facturas de quien pidió más tiempo, con planes de pago se cobra más dinero antes de las nóminas que "
+           "sin ellos (IC 95 % de la diferencia por semana por encima de 0)",
+    "H32": "Con planes, Copilot no se queda corto más que sin ellos (IC 95 % de la diferencia por debajo de +0,5 puntos)",
+    "H33": "Con planes, Copilot cuesta menos por semana que sin ellos (IC por debajo de 0)",
+    "H34": "Se mantienen H2 y H4: menos recordatorios que el calendario fijo y nunca presiona a quien disputa",
+    "H35": "El riesgo que prevé cuadra con el real (el IC 95 % de previsto - se quedó corto incluye el 0)",
 }
 
 
@@ -215,13 +228,14 @@ def semana(rng: np.random.Generator, clientes: list[Cliente], i: int) -> Semana:
 
 
 def _p_con_accion(p: float, accion: str) -> float:
-    odds = p / (1 - p) * {REMIND: LIFT_RECORDATORIO, DISCOUNT: LIFT_DESCUENTO}.get(accion, 1.0)
+    odds = p / (1 - p) * {REMIND: LIFT_RECORDATORIO, DISCOUNT: LIFT_DESCUENTO, PLAN: LIFT_PLAN}.get(accion, 1.0)
     return odds / (1 + odds)
 
 
 def resultado(s: Semana, acciones: dict[str, str], policy: ReceivablesPolicy) -> dict:
     """Lo que pasa DE VERDAD: quién paga antes de las nóminas, con los mismos números aleatorios para todos."""
     caja, descuentos, recordatorios, a_disputa, a_prometida, a_tiempo = s.caja, 0.0, 0, 0, 0, {}
+    planes, de_quien_pidio = 0, 0.0  # planes de pago ofrecidos; lo cobrado antes de nóminas de quien pidió tiempo
     for a, u in zip(s.abiertas, s.sorteo):
         acc = acciones.get(a.factura.id, WAIT)
         recordatorios += acc == REMIND
@@ -235,18 +249,24 @@ def resultado(s: Semana, acciones: dict[str, str], policy: ReceivablesPolicy) ->
         vence = max(a.factura.due_day, 0)
         if acc == DISCOUNT:
             vence = min(vence, policy.discount_window_days)
+        if acc == PLAN:  # una parte ya (si cumple, en los primeros días); el resto, mucho después de las nóminas
+            planes += 1
+            vence = min(vence, policy.plan_first_days)
         llega = vence if u < p else vence + a.retraso
         if llega <= s.nominas.day:
-            cobro = a.factura.amount
+            cobro = a.factura.amount * (policy.plan_first_pct if acc == PLAN else 1.0)
             if acc == DISCOUNT and llega <= policy.discount_window_days:
                 descuentos += policy.discount_pct * cobro
                 cobro *= 1 - policy.discount_pct
             caja += cobro
+            if a.respuesta == "asks_for_more_time":
+                de_quien_pidio += cobro
     corto = caja < s.nominas.amount
-    coste = descuentos + policy.reminder_cost * recordatorios + (policy.shortfall_penalty if corto else 0.0)
+    coste = descuentos + policy.reminder_cost * recordatorios + policy.plan_cost * planes \
+        + (policy.shortfall_penalty if corto else 0.0)
     return {"corto": bool(corto), "coste": round(coste, 2), "descuentos": round(descuentos, 2),
             "recordatorios": int(recordatorios), "a_disputa": int(a_disputa), "a_prometida": int(a_prometida),
-            "a_tiempo": a_tiempo}
+            "a_tiempo": a_tiempo, "planes": int(planes), "de_quien_pidio": round(de_quien_pidio, 2)}
 
 
 def copilot_plan(s: Semana, modelo: CollectionsModel, policy: ReceivablesPolicy, leer: bool, seed: int,
@@ -261,6 +281,8 @@ def copilot_plan(s: Semana, modelo: CollectionsModel, policy: ReceivablesPolicy,
                 inv = replace(inv, disputed=True)
             elif a.respuesta == "confirms_payment":
                 inv = replace(inv, promised=True)
+            elif a.respuesta == "asks_for_more_time":
+                inv = replace(inv, asked_for_time=True)
             p = CollectionsModel.apply_signal(p, SIGNAL_LIKELIHOOD[a.respuesta], a.respuesta)
         crudos[a.factura.customer] = p
         respuesta = a.respuesta if leer else None
@@ -356,6 +378,8 @@ def resumir(filas: dict) -> dict:
             "recordatorios_por_semana": float(np.mean([r["recordatorios"] for r in f])),
             "semanas_presionando_disputa": sum(r["a_disputa"] > 0 for r in f),
             "semanas_presionando_promesa": sum(r["a_prometida"] > 0 for r in f),
+            "planes_por_semana": float(np.mean([r["planes"] for r in f])),
+            "cobrado_de_quien_pidio_tiempo": float(np.mean([r["de_quien_pidio"] for r in f])),
         }
         if "riesgo_previsto" in f[0]:  # lo que el motor creía, para ver si acierta
             out["agentes"][a]["riesgo_previsto_pct"] = 100 * float(np.mean([r["riesgo_previsto"] for r in f]))
@@ -378,6 +402,9 @@ def resumir(filas: dict) -> dict:
          "error cuadrático por factura: Copilot - historial fijo (x1000)": [1000 * v for v in _ic_media(np.array(
              [x - y for r0, r6 in zip(filas[AGENTES[0]], filas[AGENTES[6]])
               for x, y in zip(r0["error_cliente"], r6["error_cliente"])]))]}
+    d |= {"cobrado de quien pidió tiempo: Copilot - sin planes (USD)": dif(AGENTES[0], AGENTES[7], "de_quien_pidio"),
+          "corto: Copilot - sin planes (puntos)": [100 * v for v in dif(AGENTES[0], AGENTES[7], "corto")],
+          "coste: Copilot - sin planes (USD)": dif(AGENTES[0], AGENTES[7], "coste")}
     for a in (AGENTES[0], AGENTES[6]):  # ¿cuadra lo que prevé? semana a semana, previsto - se quedó corto
         d[f"riesgo previsto - real: {a} (puntos)"] = [100 * v for v in _ic_media(
             np.array([r["riesgo_previsto"] - float(r["corto"]) for r in filas[a]]))]
@@ -407,6 +434,13 @@ def resumir(filas: dict) -> dict:
         "H28": d["H5 coste: Copilot - PayPal fijo (USD)"][2] < 0,
         "H29": r0[1] <= 0 <= r0[2],
         "H30": out["hipotesis"]["H7"],
+    }
+    out["hipotesis"] |= {
+        "H31": d["cobrado de quien pidió tiempo: Copilot - sin planes (USD)"][1] > 0,
+        "H32": d["corto: Copilot - sin planes (puntos)"][2] < 0.5,
+        "H33": d["coste: Copilot - sin planes (USD)"][2] < 0,
+        "H34": out["hipotesis"]["H7"],
+        "H35": r0[1] <= 0 <= r0[2],
     }
     return out
 

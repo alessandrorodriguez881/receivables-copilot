@@ -77,3 +77,26 @@ def test_a_real_claude_run_is_replayed_and_checked_again_by_code(demo_sin_claves
     assert repetir_grabacion(repetida) == "Briefing written by Claude"
     assert repetida.registro[0].startswith("Replay of a real Claude run")
     assert repetida.senales == original.senales and repetida.notas == original.notas
+
+
+def test_a_customer_who_asks_for_time_gets_a_payment_plan_in_paypal(demo_sin_claves, monkeypatch):
+    """Si Northwind pide más tiempo: plan de pagos (no recordatorio ni descuento), con el sí del dueño, y en PayPal la
+    factura admite pagos parciales con un mínimo ya."""
+    from triage_core.collections_decision import PLAN
+    from triage_core.signals import Signal
+    import demo
+    from dataclasses import replace
+    monkeypatch.setattr(demo, "POLICY", replace(demo.POLICY, payment_plans=True))  # apagados por defecto
+    rail, ronda, tmp = demo_sin_claves
+    libro, book = Ledger(tmp / "ledger.json"), ApprovalBook.load(tmp / "aprobaciones.json")
+    senales = SENALES_ENSAYO + [Signal("msg-x", "Northwind", "asks_for_more_time", "Could we pay half now?")]
+    s = situacion(rail, ronda, senales)
+    assert s.plan.action_of("INV-101") == PLAN
+    ejecutar(rail, libro, book, s, ronda, senales, nada)
+    plan_card = [r for r in book.pending.values() if r.action == "payment_plan"]
+    assert len(plan_card) == 1 and plan_card[0].amount == 1_250  # la mitad de 2.500 $
+    book.approve(plan_card[0].fingerprint, "owner")
+    ejecutar(rail, libro, book, situacion(rail, ronda, senales), ronda, senales, nada)
+    pid = escenario.facturas_de(ronda)["INV-101"]
+    parcial = rail.get_invoice(pid)["configuration"]["partial_payment"]
+    assert parcial["allow_partial_payment"] and parcial["minimum_amount_due"]["value"] == "1250.00"

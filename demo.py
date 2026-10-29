@@ -11,9 +11,9 @@ from pathlib import Path
 
 from escenario import (AUTOCONTROL, REVISION_RIESGO, CAJA_INICIAL, DATA, ESTUDIO, FACTURAS, NECESIDADES, facturas_abiertas,
                        facturas_de, perfiles)
-from rail_paypal import PayPalError, PayPalRail
+from rail_paypal import PayPalError, PayPalRail, money
 from triage_core.approvals import ApprovalBook, ApprovalRequest
-from triage_core.collections_decision import (DISCOUNT, ESCALATE, REMIND, CollectionsPlan, ReceivablesPolicy,
+from triage_core.collections_decision import (DISCOUNT, ESCALATE, PLAN, REMIND, CollectionsPlan, ReceivablesPolicy,
                                               plan_collections)
 from triage_core.ledger import SUCCESS, DuplicatePaymentError, Ledger
 
@@ -67,6 +67,16 @@ def tarjeta_descuento(ronda: str, iid: str, senales: list) -> ApprovalRequest:
                            (f"ronda:{ronda}", *evidencia(senales)))
 
 
+def tarjeta_plan(ronda: str, iid: str, senales: list) -> ApprovalRequest:
+    """Lo que aprueba el dueño: este plan de pagos exacto (lo que se paga ya), a este cliente, por esta factura."""
+    cliente, importe, _ = CONCEPTO[iid]
+    ya = round(POLICY.plan_first_pct * importe, 2)
+    return ApprovalRequest("payment_plan", ya, "USD", f"{cliente}: {iid} for {importe:,.2f} USD",
+                           f"the customer asked for more time: {ya:,.2f} USD within {POLICY.plan_first_days} days and "
+                           f"the rest {POLICY.plan_rest_days} days later; changing an invoice's terms is the owner's call",
+                           (f"ronda:{ronda}", *evidencia(senales)))
+
+
 def nota_recordatorio(iid: str, vencida: bool) -> tuple[str, str]:
     cliente, importe, concepto = CONCEPTO[iid]
     asunto = f"{'Overdue' if vencida else 'Upcoming'}: invoice {iid} from {ESTUDIO}"
@@ -103,6 +113,44 @@ def ejecutar(rail: PayPalRail, libro: Ledger, book: ApprovalBook, s: Situacion, 
             log(f"{d.invoice_id}: reminder sent through PayPal ({d.reason})")
         elif d.action == DISCOUNT:
             aplicar_descuento(rail, libro, book, d, pid, ronda, senales, log)
+        elif d.action == PLAN:
+            aplicar_plan(rail, libro, book, d, pid, ronda, senales, log)
+
+
+def aplicar_plan(rail: PayPalRail, libro: Ledger, book: ApprovalBook, d, pid: str, ronda: str,
+                 senales: list, log=print) -> None:
+    """Plan de pagos en PayPal: la factura admite pagos parciales con un mínimo ya. Siempre con el sí del dueño."""
+    clave = f"plan:{ronda}:{d.invoice_id}"
+    if any(e.status in SUCCESS for e in libro.attempts(clave)):
+        log(f"{d.invoice_id}: payment plan already set up in this round")
+        return
+    req = tarjeta_plan(ronda, d.invoice_id, senales)
+    if req.fingerprint in book.rejected:
+        log(f"{d.invoice_id}: the owner rejected the payment plan: not offered")
+        return
+    if not book.is_approved(req):
+        if req.fingerprint not in book.pending:
+            book.request(req)
+        log(f"{d.invoice_id}: payment plan waits for approval [{req.fingerprint[:8]}]: {req.counterparty}. "
+            f"Why: {req.reason}")
+        return
+    cliente, importe, _ = CONCEPTO[d.invoice_id]
+    e = libro.begin(clave, "payment_plan", req.amount, "USD", cliente)
+    factura = rail.get_invoice(pid)
+    cuerpo = {k: v for k, v in factura.items() if k not in ("links", "status", "due_amount", "payments", "refunds")}
+    cuerpo.setdefault("configuration", {})["partial_payment"] = {"allow_partial_payment": True,
+                                                                 "minimum_amount_due": money(req.amount)}
+    hasta = (date.today() + timedelta(days=POLICY.plan_first_days)).strftime("%b %d")
+    cuerpo["detail"]["note"] = (f"Payment plan: {req.amount:,.2f} USD by {hasta}, the rest within "
+                                f"{POLICY.plan_rest_days} days. Thank you for working with {ESTUDIO}.")
+    try:
+        rail.update(cuerpo, request_id=e.request_id)
+    except PayPalError as err:
+        libro.update(e, "FAILED")
+        log(f"{d.invoice_id}: PayPal refused the payment plan: {err}")
+        return
+    libro.update(e, "COMPLETED", pid)
+    log(f"{d.invoice_id}: payment plan set up in PayPal: {req.amount:,.2f} USD by {hasta}, the rest later")
 
 
 def aplicar_descuento(rail: PayPalRail, libro: Ledger, book: ApprovalBook, d, pid: str, ronda: str,

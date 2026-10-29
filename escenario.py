@@ -171,8 +171,9 @@ def _afectadas(sig: Signal) -> set[str]:
 
 def facturas_abiertas(senales: list[Signal], cobradas: set[str] = frozenset()) -> list[Invoice]:
     """Las facturas que siguen sin cobrar. Una disputa comprobada las pasa a una persona; una fecha confirmada,
-    a no presionar."""
+    a no presionar; una petición de más tiempo, a un plan de pagos (nunca un descuento)."""
     en_disputa = {i for s in senales if s.signal == "disputes_invoice" for i in _afectadas(s)}
     prometidas = {i for s in senales if s.signal == "confirms_payment" for i in _afectadas(s)}
-    return [Invoice(i, c, a, d, disputed=i in en_disputa, promised=i in prometidas)
+    piden_tiempo = {i for s in senales if s.signal == "asks_for_more_time" for i in _afectadas(s)}
+    return [Invoice(i, c, a, d, disputed=i in en_disputa, promised=i in prometidas, asked_for_time=i in piden_tiempo)
             for i, c, a, d, _ in FACTURAS if i not in cobradas]

@@ -254,3 +254,17 @@ En la semilla 2035: Copilot 26,5 % de semanas cortas y 432 $; los fijos, 28,5 % 
 > "We tested it on a thousand simulated weeks against a fixed reminder schedule. It ran short on payday less often, with a third of the reminders, and it never chased a customer who was disputing or had already confirmed payment. The fixed schedule chased someone who was disputing in about a quarter of the weeks. And the agent checks itself: it compares what it predicted with what happened, invoice by invoice and week by week, and corrects its forecast."
 
 **No decir:** «más barato». «Ran short less often» vale: menos en las ocho semillas nuevas, claro en siete.
+
+## Tanda 7 (29-oct, mañana): planes de pago, con hipótesis fijadas antes (semillas nuevas 2042 y 2043)
+A quien pide más tiempo, el agente ya no le recordaría ni le ofrecería descuento: le ofrecería la mitad en 3 días y el resto 30 días después, con el sí del dueño. De verdad, en la simulación un plan ayuda algo menos de lo que supone la política (odds x2 frente a x3). Se compara con el mismo Copilot sin planes.
+
+| | 2042 | 2043 |
+|---|---|---|
+| Cobrado antes de nóminas de quien pidió tiempo (con planes - sin planes, $ por semana) | −298 (IC −365 a −231) | −468 (IC −550 a −386) |
+| Semanas cortas (puntos, con planes - sin planes) | +0,2 (IC −0,4 a +0,8) | +1,5 (IC +0,7 a +2,4) |
+| Coste ($ por semana) | +3 (IC −6 a +12) | +13 (IC +1 a +26) |
+
+- **H31 ❌❌, H32 ❌❌, H33 ❌❌:** con planes se cobra menos antes de las nóminas (la mitad llega después) y no se gana seguridad. **H34 ✅✅** (menos recordatorios que el calendario fijo y nunca presiona a quien disputa) y **H35 ✅✅** (el riesgo previsto cuadra).
+- Con planes, Copilot tampoco se quedó corto menos que los recordatorios fijos (−0,3 y +0,2 puntos, dentro del azar).
+- **Decisión:** los planes se quedan en el código, probados (también en el sandbox de verdad), pero **apagados por defecto** (`ReceivablesPolicy.payment_plans = False`). Con eso, el agente, la demo y las cifras del vídeo son las de antes (las de la sexta tanda).
+- Límite de la simulación: no modela que quien pide tiempo no tenga dinero para pagar entero antes (por eso el descuento le sigue funcionando). Cambiar eso ahora, después de ver los resultados, sería hacer trampa; queda como pregunta abierta.

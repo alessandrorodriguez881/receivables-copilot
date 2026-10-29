@@ -16,7 +16,8 @@ import pandas as pd
 import streamlit as st
 
 import preparar_facturas
-from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobro, ejecutar, situacion, tarjeta_descuento)
+from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobro, ejecutar, situacion, tarjeta_descuento,
+                  tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
                        POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales, notas_de,
                        ronda_actual, senales_de)
@@ -25,7 +26,7 @@ from modo import SIMULADO, conectar
 from rail_paypal import PayPalError, PayPalRail, read_env
 from triage_core.approvals import ApprovalBook
 from triage_core.cash_simulation import cash_bands
-from triage_core.collections_decision import DISCOUNT, ESCALATE, REMIND, WAIT
+from triage_core.collections_decision import DISCOUNT, ESCALATE, PLAN, REMIND, WAIT
 from triage_core.ledger import Ledger
 
 st.set_page_config(page_title="Receivables Copilot", page_icon=":material/request_quote:", layout="wide")
@@ -35,6 +36,7 @@ ACCION = {  # etiqueta, color e icono de cada decisión
     REMIND: ("Send a reminder", "blue", ":material/notifications:"),
     DISCOUNT: (f"Offer {POLICY.discount_pct:.0%} early-payment discount", "orange", ":material/sell:"),
     ESCALATE: ("A person decides", "red", ":material/front_hand:"),
+    PLAN: (f"Offer a payment plan: {POLICY.plan_first_pct:.0%} now", "violet", ":material/calendar_month:"),
 }
 NEED = NECESIDADES[0]
 TEAL, GRIS, ROJO = "#0F766E", "#A1A1AA", "#DC2626"  # los de .streamlit/config.toml
@@ -260,11 +262,13 @@ with facturas:
                 pagadas, tarde = POR_CLIENTE[cliente]
                 st.caption(f":material/history: {cliente}'s history: {pagadas} paid invoices"
                            + (" in PayPal" if "PayPal" in ORIGEN_HISTORIAL else "") + f", {tarde} of them late")
-                if d.action == DISCOUNT and d.needs_approval:
-                    req = tarjeta_descuento(ronda, iid, senales or [])
+                if d.action in (DISCOUNT, PLAN) and d.needs_approval:
+                    req = (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
                     if req.fingerprint in book.pending:
                         st.info(md(f"Gives away {usd(req.amount, 2)}: above the {usd(POLICY.autonomous_discount_limit)} "
-                                   "the agent may give on its own."), title="Needs your approval",
+                                   "the agent may give on its own." if d.action == DISCOUNT else
+                                   f"Changes the invoice's terms: {usd(req.amount, 2)} now, the rest "
+                                   f"{POLICY.plan_rest_days} days later."), title="Needs your approval",
                                 icon=":material/approval:")
                         b = st.container(horizontal=True)
                         b.button("Approve", key=f"ok-{iid}", type="primary", icon=":material/check:",
@@ -321,6 +325,7 @@ with actividad:
     for e in hechos:
         tipo, _, iid = e.op_key.split(":", 2)
         titulo = {"remind": f"Reminder sent for {iid}", "discount": f"{POLICY.discount_pct:.0%} discount added to {iid}",
+                  "plan": f"Payment plan set up for {iid}: {usd(e.amount, 2)} now",
                   "payment": f"{iid} paid: {usd(e.amount, 2)}"}.get(tipo, e.op_key)
         with st.status(titulo, type="step", state="complete", expanded=True):
             st.caption(f"{e.counterparty} · {e.updated_at[:19].replace('T', ' ')} UTC · PayPal-Request-Id `{e.request_id[:8]}…`")
@@ -332,12 +337,18 @@ with reglas:
                 "one that keeps the chance of being short on payday under the limit. Amounts, limits and approvals "
                 "live in code; the AI reads replies and writes reminders.")
     st.table({"Rule": ["Max chance of being short on payday", "Early-payment discount", "Discount the agent may give alone",
-                       "Reminders", "Customer confirmed a payment date", "Disputed, or more than 45 days late",
+                       "Reminders", "Customer confirmed a payment date", "Customer asked for more time",
+                       "Disputed, or more than 45 days late",
                        "Customers' payment history", "Self-check"],
               "Value": [f"{POLICY.max_short_prob:.0%}", f"{POLICY.discount_pct:.0%} if paid within "
                         f"{POLICY.discount_window_days} days", f"{POLICY.autonomous_discount_limit:,.0f} USD",
                         f"at most every {POLICY.min_days_between_reminders} days, from "
                         f"{POLICY.remind_from_days_before_due} days before the due date",
-                        "no chasing", "a person decides", ORIGEN_HISTORIAL,
+                        "no chasing",
+                        (f"no reminder and no discount: a payment plan, {POLICY.plan_first_pct:.0%} now and the rest "
+                         f"{POLICY.plan_rest_days} days later, if you approve it") if POLICY.payment_plans else
+                        ("its odds go down; payment plans are available but off: in our simulation they left half "
+                         "the money after payday"),
+                        "a person decides", ORIGEN_HISTORIAL,
                         "compares its forecasts with what happened, invoice by invoice and week by week, and "
                         "corrects them; this studio has no track record yet, so it uses the assumptions above"]})

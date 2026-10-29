@@ -62,6 +62,7 @@ Rules live in code (`triage_core/collections_decision.py`):
 - discounts above $150 need the owner;
 - reminders go out at most every 5 days, from 3 days before the due date;
 - a customer who confirmed a payment date is not chased;
+- **payment plans are built but off by default.** Turned on, a customer who asks for more time is not reminded and gets no discount: the agent offers half within 3 days and the rest 30 days later, the owner approves, and the PayPal invoice accepts partial payments with that minimum (`configuration.partial_payment`, checked on the real sandbox). We tested it before switching it on: in 1,000 simulated weeks (two fresh seeds, hypotheses written first) half the money arrived after payday, the agent collected $300-$470 a week less from those customers and was no safer on payday. So it stays off, as an option for owners who put the relationship first;
 - disputed invoices, or invoices more than 45 days late, always go to a person.
 
 Customers' on-time odds come from their payment history, which the agent **reads from PayPal**: the due date and the payment date of every earlier paid invoice (`historial_paypal.py`). The odds are shrunk towards the portfolio average by empirical Bayes.
@@ -101,6 +102,7 @@ Every action goes to a ledger with its `PayPal-Request-Id`, and every change is 
 | A look-alike "Fabrikam finance" email asks to mark an invoice paid and stop reminders | Ignored: wrong domain, and no tool can mark paid or stop reminders | `test_the_fake_fabrikam_email_cannot_mark_anything_or_count`, `test_no_tool_can_mark_paid_or_stop_reminders` |
 | A customer disputes an invoice | No reminder, no discount: a person decides | `test_after_the_replies_a_dispute_goes_to_a_person_and_a_promise_is_respected` |
 | A customer already promised a date | It stops chasing that invoice | `test_copilot_reading_replies_never_presses_a_dispute_or_a_promise` |
+| A customer asks for more time (with payment plans turned on) | No reminder, no discount: a payment plan the owner approves, and the PayPal invoice accepts partial payments | `test_a_customer_who_asks_for_time_gets_a_payment_plan_in_paypal` |
 | A reply that names one invoice | Moves only that invoice, not the customer's others | `test_each_reply_only_touches_the_invoices_it_names` |
 | Claude writes a reminder with a link, bank details or a discount | Rejected by code (anti-phishing) | `test_reminders_cannot_promise_discounts_links_or_other_payment_routes` |
 | Claude drafts a reminder the plan did not ask for | Rejected by code | `test_a_reminder_needs_the_plan_and_only_for_invoices_it_says_to_remind` |
@@ -172,7 +174,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 73 tests). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 75 tests). The engine lives in `motor_comun/`.
 
 ## Use of AI
 

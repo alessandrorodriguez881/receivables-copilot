@@ -52,5 +52,5 @@ def test_small_run_is_reproducible_and_complete():
     assert [r["coste"] for r in a[AGENTES[0]]] == [r["coste"] for r in b[AGENTES[0]]]
     res = resumir(a)
     # H8 y H15: pruebas de la demo; H13, H16-H20 y H21-H25 salieron con sus agentes de comparación
-    esperadas = {f"H{i}" for i in range(1, 15)} - {"H8", "H13"} | {f"H{i}" for i in range(26, 31)}
+    esperadas = {f"H{i}" for i in range(1, 15)} - {"H8", "H13"} | {f"H{i}" for i in range(26, 31)} | {f"H{i}" for i in range(31, 36)}
     assert set(res["hipotesis"]) == esperadas and res["semanas"] == 6
