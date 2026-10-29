@@ -1,0 +1,11 @@
+
+Semilla 2031: riesgo previsto 21.8% y real 20.6%
+  semanas con alguna disputa   27.1% de las semanas: previsto 27.8%, real 29.5%
+  semanas sin disputa          72.9% de las semanas: previsto 19.5%, real 17.3%
+  Por factura, llega antes de las nóminas (creído / real):
+    en disputa                   n=  299  37.2% / 35.8%
+    sin disputa, vencida         n= 2502  69.2% / 71.5%
+    sin disputa, sin vencer      n= 1181  81.6% / 84.2%
+    sin disputa, acción WAIT     n= 1549  78.8% / 80.1%
+    sin disputa, acción REMIND   n= 1285  70.8% / 72.5%
+    sin disputa, acción DISCOUNT n=  849  66.7% / 71.8%

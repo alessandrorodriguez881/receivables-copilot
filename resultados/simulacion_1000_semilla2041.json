@@ -1,0 +1,159 @@
+{
+  "semanas": 1000,
+  "agentes": {
+    "Receivables Copilot": {
+      "corto_pct": 19.7,
+      "coste_medio": 308.38351,
+      "descuentos_medios": 9.085509999999998,
+      "recordatorios_por_semana": 1.266,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0,
+      "riesgo_previsto_pct": 20.41818772808182,
+      "aprendido": "learned from 3998 past invoices: overdue odds x0.22, reminder x1.19, discount x1.57, confirmation x3.98, more-time request x0.35, dispute x0.08; weekly risk checked on 1000 past weeks: a predicted 10% means 15%, 30% means 35%",
+      "error_cliente_puntos": 7.508592707268659
+    },
+    "Copilot without replies": {
+      "corto_pct": 20.0,
+      "coste_medio": 312.76648,
+      "descuentos_medios": 7.57348,
+      "recordatorios_por_semana": 1.731,
+      "semanas_presionando_disputa": 139,
+      "semanas_presionando_promesa": 264,
+      "riesgo_previsto_pct": 21.147662830431933,
+      "aprendido": "learned from 3998 past invoices: overdue odds x0.27, reminder x1.12, discount x1.31, confirmation x1.00, more-time request x1.00, dispute x1.00; weekly risk checked on 1000 past weeks: a predicted 10% means 15%, 30% means 32%",
+      "error_cliente_puntos": 11.174642081711712
+    },
+    "PayPal fixed reminders": {
+      "corto_pct": 20.1,
+      "coste_medio": 311.886,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 3.462,
+      "semanas_presionando_disputa": 243,
+      "semanas_presionando_promesa": 464
+    },
+    "Discount everyone": {
+      "corto_pct": 17.5,
+      "coste_medio": 534.64613,
+      "descuentos_medios": 272.14614,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 275,
+      "semanas_presionando_promesa": 525
+    },
+    "Do nothing": {
+      "corto_pct": 21.2,
+      "coste_medio": 318.0,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    },
+    "Copilot, no learning": {
+      "corto_pct": 18.6,
+      "coste_medio": 313.70652,
+      "descuentos_medios": 30.68052,
+      "recordatorios_por_semana": 1.342,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0,
+      "riesgo_previsto_pct": 8.42624
+    },
+    "Copilot, history fixed": {
+      "corto_pct": 20.3,
+      "coste_medio": 321.89971,
+      "descuentos_medios": 17.19572,
+      "recordatorios_por_semana": 0.068,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0,
+      "riesgo_previsto_pct": 22.429875728580214,
+      "aprendido": "learned from 3998 past invoices: overdue odds x0.24, reminder x0.78, discount x1.41, confirmation x3.62, more-time request x0.37, dispute x0.09; weekly risk checked on 1000 past weeks: a predicted 10% means 12%, 30% means 31%",
+      "error_cliente_puntos": 7.155602320902932
+    }
+  },
+  "diferencias": {
+    "H1 corto: Copilot - PayPal fijo (puntos)": [
+      -0.4,
+      -0.9540941836586668,
+      0.15409418365866684
+    ],
+    "H2 recordatorios: Copilot - PayPal fijo": [
+      -2.196,
+      -2.2727939685652983,
+      -2.119206031434702
+    ],
+    "H3 coste: Copilot - descuento a todos (USD)": [
+      -226.26262,
+      -245.00718160935054,
+      -207.51805839064946
+    ],
+    "H5 coste: Copilot - PayPal fijo (USD)": [
+      -3.50249,
+      -11.537474209309552,
+      4.532494209309553
+    ],
+    "coste: Copilot - sin aprender (USD)": [
+      -5.323009999999999,
+      -15.967370125104868,
+      5.32135012510487
+    ],
+    "corto: Copilot - sin aprender (puntos)": [
+      1.0999999999999999,
+      0.3962564963575726,
+      1.8037435036424272
+    ],
+    "coste: Copilot - sin leer respuestas (USD)": [
+      -4.382969999999999,
+      -9.63140119376451,
+      0.8654611937645109
+    ],
+    "corto: Copilot - sin leer respuestas (puntos)": [
+      -0.3,
+      -0.6391419662520009,
+      0.03914196625200089
+    ],
+    "coste: Copilot - historial fijo (USD)": [
+      -13.516200000000001,
+      -21.231235880570505,
+      -5.801164119429498
+    ],
+    "corto: Copilot - historial fijo (puntos)": [
+      -0.6,
+      -1.078897031068649,
+      -0.12110296893135114
+    ],
+    "error cuadrático por factura: Copilot - historial fijo (x1000)": [
+      0.5176319868736656,
+      0.4290197189366262,
+      0.6062442548107051
+    ],
+    "riesgo previsto - real: Receivables Copilot (puntos)": [
+      0.718187728081819,
+      -1.506500127794209,
+      2.942875583957847
+    ],
+    "riesgo previsto - real: Copilot, history fixed (puntos)": [
+      2.1298757285802155,
+      -0.10644458607423218,
+      4.366196043234663
+    ]
+  },
+  "hipotesis": {
+    "H1": false,
+    "H2": true,
+    "H3": true,
+    "H4": true,
+    "H5": false,
+    "H6": true,
+    "H7": true,
+    "H9": true,
+    "H10": true,
+    "H11": false,
+    "H12": false,
+    "H14": true,
+    "H26": false,
+    "H27": true,
+    "H28": false,
+    "H29": true,
+    "H30": true
+  },
+  "semilla": 2041,
+  "segundos": 737.0
+}

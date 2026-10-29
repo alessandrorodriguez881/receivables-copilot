@@ -1,0 +1,137 @@
+{
+  "semanas": 1000,
+  "agentes": {
+    "Receivables Copilot": {
+      "corto_pct": 26.5,
+      "coste_medio": 431.51683999999995,
+      "descuentos_medios": 29.61885,
+      "recordatorios_por_semana": 1.466,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0,
+      "riesgo_previsto_pct": 21.8788,
+      "aprendido": "learned from 3677 past invoices: overdue odds x0.21, reminder x1.35, discount x1.86, confirmation x4.43, more-time request x0.38"
+    },
+    "Copilot without replies": {
+      "corto_pct": 27.0,
+      "coste_medio": 445.36554,
+      "descuentos_medios": 33.363550000000004,
+      "recordatorios_por_semana": 2.334,
+      "semanas_presionando_disputa": 202,
+      "semanas_presionando_promesa": 390,
+      "riesgo_previsto_pct": 20.016939999999998,
+      "aprendido": "learned from 3677 past invoices: overdue odds x0.21, reminder x1.36, discount x1.74, confirmation x1.00, more-time request x1.00"
+    },
+    "PayPal fixed reminders": {
+      "corto_pct": 28.5,
+      "coste_medio": 437.709,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 3.403,
+      "semanas_presionando_disputa": 231,
+      "semanas_presionando_promesa": 441
+    },
+    "Discount everyone": {
+      "corto_pct": 24.1,
+      "coste_medio": 612.7654399999999,
+      "descuentos_medios": 251.26545,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 271,
+      "semanas_presionando_promesa": 504
+    },
+    "Do nothing": {
+      "corto_pct": 31.2,
+      "coste_medio": 468.0,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    },
+    "Copilot, no learning": {
+      "corto_pct": 26.1,
+      "coste_medio": 442.34875,
+      "descuentos_medios": 46.813759999999995,
+      "recordatorios_por_semana": 1.345,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0,
+      "riesgo_previsto_pct": 15.926939999999998
+    },
+    "Copilot, cost only": {
+      "corto_pct": 26.7,
+      "coste_medio": 428.41904000000005,
+      "descuentos_medios": 24.35505,
+      "recordatorios_por_semana": 1.188,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0,
+      "riesgo_previsto_pct": 22.14488,
+      "aprendido": "learned from 3677 past invoices: overdue odds x0.21, reminder x1.24, discount x1.86, confirmation x4.21, more-time request x0.37"
+    }
+  },
+  "diferencias": {
+    "H1 corto: Copilot - PayPal fijo (puntos)": [
+      -2.0,
+      -2.952641131342294,
+      -1.0473588686577064
+    ],
+    "H2 recordatorios: Copilot - PayPal fijo": [
+      -1.937,
+      -2.005466905924007,
+      -1.8685330940759932
+    ],
+    "H3 coste: Copilot - descuento a todos (USD)": [
+      -181.2486,
+      -198.82062603699552,
+      -163.6765739630045
+    ],
+    "H5 coste: Copilot - PayPal fijo (USD)": [
+      -6.19216,
+      -19.711236389816513,
+      7.326916389816513
+    ],
+    "coste: Copilot - sin aprender (USD)": [
+      -10.831909999999997,
+      -21.599241119913366,
+      -0.06457888008663026
+    ],
+    "corto: Copilot - sin aprender (puntos)": [
+      0.4,
+      -0.27885063318979253,
+      1.0788506331897925
+    ],
+    "coste: Copilot - sin leer respuestas (USD)": [
+      -13.848700000000001,
+      -25.10887994673478,
+      -2.588520053265219
+    ],
+    "corto: Copilot - sin leer respuestas (puntos)": [
+      -0.5,
+      -1.2588514053854387,
+      0.2588514053854386
+    ],
+    "coste: solo coste - PayPal fijo (USD)": [
+      -9.28996,
+      -22.261878542335033,
+      3.6819585423350336
+    ],
+    "corto: solo coste - PayPal fijo (puntos)": [
+      -1.7999999999999998,
+      -2.712983436188606,
+      -0.8870165638113936
+    ]
+  },
+  "hipotesis": {
+    "H1": true,
+    "H2": true,
+    "H3": true,
+    "H4": true,
+    "H5": false,
+    "H6": true,
+    "H7": true,
+    "H9": false,
+    "H10": true,
+    "H11": true,
+    "H12": false,
+    "H13": false,
+    "H14": true
+  },
+  "semilla": 2035,
+  "segundos": 668.5
+}

@@ -1,0 +1,70 @@
+{
+  "semanas": 1000,
+  "agentes": {
+    "Receivables Copilot": {
+      "corto_pct": 22.4,
+      "coste_medio": 429.55926,
+      "descuentos_medios": 91.15325999999999,
+      "recordatorios_por_semana": 0.802,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    },
+    "Copilot without replies": {
+      "corto_pct": 21.7,
+      "coste_medio": 416.79692000000006,
+      "descuentos_medios": 86.67093000000001,
+      "recordatorios_por_semana": 1.542,
+      "semanas_presionando_disputa": 205,
+      "semanas_presionando_promesa": 493
+    },
+    "PayPal fixed reminders": {
+      "corto_pct": 23.4,
+      "coste_medio": 361.233,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 3.411,
+      "semanas_presionando_disputa": 245,
+      "semanas_presionando_promesa": 578
+    },
+    "Discount everyone": {
+      "corto_pct": 19.4,
+      "coste_medio": 551.5431799999999,
+      "descuentos_medios": 260.54316,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 275,
+      "semanas_presionando_promesa": 636
+    },
+    "Do nothing": {
+      "corto_pct": 25.8,
+      "coste_medio": 387.0,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    }
+  },
+  "diferencias": {
+    "H1 corto: Copilot - PayPal fijo (puntos)": [
+      -1.0,
+      -2.072281767162059,
+      0.07228176716205896
+    ],
+    "H2 recordatorios: Copilot - PayPal fijo": [
+      -2.609,
+      -2.6865051185006115,
+      -2.5314948814993885
+    ],
+    "H3 coste: Copilot - descuento a todos (USD)": [
+      -121.98392000000001,
+      -140.6829517131972,
+      -103.28488828680281
+    ]
+  },
+  "hipotesis": {
+    "H1": false,
+    "H2": true,
+    "H3": true,
+    "H4": true
+  },
+  "semilla": 2031,
+  "segundos": 219.1
+}

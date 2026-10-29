@@ -1,0 +1,96 @@
+{
+  "semanas": 1000,
+  "agentes": {
+    "Receivables Copilot": {
+      "corto_pct": 17.0,
+      "coste_medio": 297.69275,
+      "descuentos_medios": 38.663759999999996,
+      "recordatorios_por_semana": 1.343,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    },
+    "Copilot without replies": {
+      "corto_pct": 16.8,
+      "coste_medio": 306.36195000000004,
+      "descuentos_medios": 48.583960000000005,
+      "recordatorios_por_semana": 1.926,
+      "semanas_presionando_disputa": 181,
+      "semanas_presionando_promesa": 437
+    },
+    "PayPal fixed reminders": {
+      "corto_pct": 17.6,
+      "coste_medio": 274.401,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 3.467,
+      "semanas_presionando_disputa": 249,
+      "semanas_presionando_promesa": 543
+    },
+    "Discount everyone": {
+      "corto_pct": 15.1,
+      "coste_medio": 492.26390000000004,
+      "descuentos_medios": 265.76390000000004,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 286,
+      "semanas_presionando_promesa": 605
+    },
+    "Do nothing": {
+      "corto_pct": 19.3,
+      "coste_medio": 289.5,
+      "descuentos_medios": 0.0,
+      "recordatorios_por_semana": 0.0,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    },
+    "Copilot, old rule": {
+      "corto_pct": 15.9,
+      "coste_medio": 334.9122,
+      "descuentos_medios": 94.21020999999999,
+      "recordatorios_por_semana": 0.734,
+      "semanas_presionando_disputa": 0,
+      "semanas_presionando_promesa": 0
+    }
+  },
+  "diferencias": {
+    "H1 corto: Copilot - PayPal fijo (puntos)": [
+      -0.6,
+      -1.3327878287758348,
+      0.13278782877583478
+    ],
+    "H2 recordatorios: Copilot - PayPal fijo": [
+      -2.124,
+      -2.196916425883086,
+      -2.051083574116914
+    ],
+    "H3 coste: Copilot - descuento a todos (USD)": [
+      -194.57115000000002,
+      -211.64889034878908,
+      -177.49340965121095
+    ],
+    "H5 coste: Copilot - PayPal fijo (USD)": [
+      23.29175,
+      12.291204598723011,
+      34.29229540127699
+    ],
+    "coste: Copilot - regla antigua (USD)": [
+      -37.219449999999995,
+      -48.58637897266003,
+      -25.852521027339964
+    ],
+    "corto: Copilot - regla antigua (puntos)": [
+      1.0999999999999999,
+      0.3962564963575726,
+      1.8037435036424272
+    ]
+  },
+  "hipotesis": {
+    "H1": false,
+    "H2": true,
+    "H3": true,
+    "H4": true,
+    "H5": false,
+    "H6": true,
+    "H7": true
+  },
+  "semilla": 2032,
+  "segundos": 301.4
+}

@@ -1,0 +1,11 @@
+
+Semilla 2034: riesgo previsto 19.2% y real 23.7%
+  semanas con alguna disputa   30.6% de las semanas: previsto 23.6%, real 32.0%
+  semanas sin disputa          69.4% de las semanas: previsto 17.3%, real 20.0%
+  Por factura, llega antes de las nóminas (creído / real):
+    en disputa                   n=  360  53.5% / 38.6%
+    sin disputa, vencida         n= 2522  72.5% / 70.3%
+    sin disputa, sin vencer      n= 1110  81.4% / 82.2%
+    sin disputa, acción WAIT     n= 1901  82.1% / 80.3%
+    sin disputa, acción REMIND   n= 1162  70.2% / 68.6%
+    sin disputa, acción DISCOUNT n=  569  62.1% / 63.6%

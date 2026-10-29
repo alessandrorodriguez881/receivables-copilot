@@ -1,0 +1,11 @@
+
+Semilla 2030: riesgo previsto 16.5% y real 16.9%
+  semanas con alguna disputa   27.7% de las semanas: previsto 18.9%, real 23.1%
+  semanas sin disputa          72.3% de las semanas: previsto 15.6%, real 14.5%
+  Por factura, llega antes de las nóminas (creído / real):
+    en disputa                   n=  320  66.8% / 39.7%
+    sin disputa, vencida         n= 2518  74.1% / 72.4%
+    sin disputa, sin vencer      n= 1167  84.5% / 85.9%
+    sin disputa, acción WAIT     n= 1818  82.7% / 81.7%
+    sin disputa, acción REMIND   n= 1568  72.7% / 72.4%
+    sin disputa, acción DISCOUNT n=  299  70.0% / 68.2%

@@ -1,0 +1,38 @@
+{
+ "actual": {
+  "corto_pct": 22.8,
+  "coste": 386.97837,
+  "descuentos": 40.856370000000005,
+  "recordatorios": 1.374,
+  "semanas_seguras": 597,
+  "descuento_en_seguras": 28.102490000000003,
+  "descuento_en_inseguras": 12.753879999999999,
+  "riesgo_previsto_medio": 10.0261
+ },
+ "sin descuentos": {
+  "corto_pct": 23.9,
+  "coste": 363.918,
+  "descuentos": 0.0,
+  "recordatorios": 1.806,
+  "semanas_seguras": 377,
+  "descuento_en_seguras": 0.0,
+  "descuento_en_inseguras": 0.0,
+  "riesgo_previsto_medio": 12.374339999999998
+ },
+ "sin tope del 5 %": {
+  "corto_pct": 23.0,
+  "coste": 363.6549,
+  "descuentos": 13.6569,
+  "recordatorios": 1.666,
+  "semanas_seguras": 8,
+  "descuento_en_seguras": 0.16961,
+  "descuento_en_inseguras": 13.487290000000002,
+  "riesgo_previsto_medio": 10.78292
+ },
+ "fijo": {
+  "corto_pct": 23.400000000000002,
+  "coste": 361.233,
+  "descuentos": 0.0,
+  "recordatorios": 3.411
+ }
+}

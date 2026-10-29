@@ -1,0 +1,19 @@
+{
+  "oraculo": {
+    "corto_pct": 55.00000000000001,
+    "coste_medio": 835.2855,
+    "descuentos_medios": 7.1355,
+    "recordatorios_por_semana": 1.05
+  },
+  "fijos": {
+    "corto_pct": 55.00000000000001,
+    "coste_medio": 834.45,
+    "descuentos_medios": 0.0,
+    "recordatorios_por_semana": 3.15
+  },
+  "coste: oráculo - fijos (USD)": [
+    0.8355000000000004,
+    -13.871782139115911,
+    15.54278213911591
+  ]
+}
