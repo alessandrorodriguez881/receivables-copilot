@@ -65,6 +65,7 @@ ORIGEN_HISTORIAL = (f"{len(_LEIDO)} paid invoices read from PayPal" if _LEIDO
                     else "the demo's payment history" if SIMULADO
                     else "the scenario's history (not loaded into PayPal yet)")
 _USADO = _LEIDO or historial_escenario()
+HISTORIAL_MODELO = _USADO  # lo que usa el modelo de pagos (la pantalla lo enseña)
 POR_CLIENTE = {c: (sum(f.customer == c for f in _USADO), sum(f.customer == c and f.days_late > 0 for f in _USADO))
                for c in CLIENTES}  # cliente -> (facturas pagadas, de ellas tarde), para la pantalla
 MODEL = CollectionsModel(_USADO)

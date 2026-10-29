@@ -95,6 +95,17 @@ An approval is bound to the exact discount, the customer, the invoice and the ev
 
 Every action goes to a ledger with its `PayPal-Request-Id`, and every change is also appended to an audit trail where each event carries the hash of the one before. `python verificar_auditoria.py` checks the chain and the ledger against it.
 
+## The worklist (AG Grid)
+
+The **Invoices** tab opens with a worklist built on [AG Grid Community](https://www.ag-grid.com/) 36.2, inside our own Streamlit component (`tabla_aggrid.py`, Components v2):
+- one row per invoice: amount, due date, its status in PayPal (with what has been paid), the agent's call and the on-time odds before → after acting, drawn by custom cell renderers;
+- hover the agent's call to read its reason; click a row to open the invoice and approve or reject the discount there;
+- sort and filter any column; when a payment lands in PayPal the row updates in place and the changed cells flash.
+
+The **How it decides** tab adds a second grid: the payment history the forecast learns from (every earlier paid invoice, read from PayPal), with a quick filter across all columns.
+
+AG Grid loads from jsDelivr at a pinned version. Without internet the grids say so, and the cards below show the same data.
+
 ## Traps it handles (each one is an automated test)
 
 | Trap | What happens | Test |

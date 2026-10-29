@@ -21,11 +21,14 @@ from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypa
                   tarjeta_descuento,
                   tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
-                       POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales, notas_de,
+                       HISTORIAL_MODELO, POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales,
+                       notas_de,
                        ronda_actual, senales_de)
 from agente_ia import GRABACION
+from historial_paypal import numerar
 from modo import SIMULADO, conectar
 from rail_paypal import PayPalError, PayPalRail, read_env
+from tabla_aggrid import tabla
 from triage_core.approvals import ApprovalBook
 from triage_core.cash_simulation import cash_bands
 from triage_core.collections_decision import DISCOUNT, ESCALATE, PLAN, REMIND, WAIT
@@ -192,10 +195,13 @@ if SIMULADO:
             "keys in `.env`, the same buttons create, remind and update real invoices in the PayPal sandbox.",
             icon=":material/science:")
 
+# Huecos fijos para lo que aparece y desaparece (progreso, errores, avisos): así lo de abajo no cambia de sitio y
+# Streamlit no vuelve a montar las tablas en cada paso (si no, no se verían parpadear las celdas que cambian)
+arriba = st.container()
 if pulsado:
     nombre, fn = pulsado
     st.session_state.error, mensajes = None, []
-    with st.status(f":shimmer[{nombre}]", expanded=True) as progreso:
+    with arriba, st.status(f":shimmer[{nombre}]", expanded=True) as progreso:
         def log(m: str) -> None:
             mensajes.append(m)
             st.text(m)
@@ -208,7 +214,7 @@ if pulsado:
     st.session_state.log = [f"**{nombre}**"] + mensajes + st.session_state.log
     st.rerun()
 if st.session_state.error:
-    st.error(st.session_state.error, icon=":material/error:")
+    arriba.error(st.session_state.error, icon=":material/error:")
 
 s = situacion(rail, ronda, senales or [])
 decision = {d.invoice_id: d for d in s.plan.decisions}
@@ -228,18 +234,119 @@ pendientes = [(fp, r) for fp, r in book.pending.items() if r.evidence[:1] == (f"
 c4.metric("Waiting for your approval", len(pendientes), border=True, height="stretch",
           help=f"Discounts above {usd(POLICY.autonomous_discount_limit)} need you")
 
-if s.plan.notes:
-    for n in s.plan.notes:
-        st.warning(n, icon=":material/warning:")
+avisos = st.container()
+for n in s.plan.notes:
+    avisos.warning(n, icon=":material/warning:")
 if st.session_state.cambios:
     c = st.session_state.cambios
     lineas = "; ".join(f"**{i}** {ACCION[a][0].lower()} → {ACCION[b][0].lower()}" for i, a, b in c["lineas"]) or "nothing"
     origen = (f" in PayPal: {', '.join(c['detectado'])}. The agent spotted it on its own (it checks PayPal every "
               f"{VIGILANCIA} s) and re-planned" if c.get("detectado") else "")
-    st.success(md(f"Payment received{origen}. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
-                  f"The agent only reopened what the new cash changes: {lineas}."), icon=":material/savings:")
+    avisos.success(md(f"Payment received{origen}. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
+                      f"The agent only reopened what the new cash changes: {lineas}."), icon=":material/savings:")
 
 facturas, bandeja, actividad, reglas = st.tabs(["Invoices", "Inbox", "Activity in PayPal", "How it decides"])
+PAGADA = ("PAID", "MARKED_AS_PAID")
+COLUMNAS_TRABAJO = [
+    {"field": "factura", "headerName": "Invoice", "pinned": "left", "flex": 0, "width": 95},
+    {"field": "cliente", "headerName": "Customer", "flex": 0, "width": 105},
+    {"field": "importe", "headerName": "Amount", "tipo": "dinero", "flex": 0, "width": 100},
+    {"field": "vence", "headerName": "Due", "tipo": "dias", "flex": 0, "width": 145},
+    {"field": "estado", "headerName": "In PayPal", "tipo": "estado", "flex": 0, "width": 130,
+     "headerTooltip": "The invoice's status in PayPal, and what has been paid on it"},
+    {"field": "accion", "headerName": "Agent's call", "tipo": "accion", "minWidth": 290, "flex": 2,
+     "headerTooltip": "What the agent will do, and whether it needs your approval first"},
+    {"field": "p_despues", "headerName": "On-time odds", "tipo": "probabilidad", "minWidth": 150,
+     "headerTooltip": "Chance this invoice is paid on time: before → after the agent's action"},
+]
+COLUMNAS_HISTORIAL = [
+    {"field": "numero", "headerName": "Invoice", "minWidth": 210},
+    {"field": "cliente", "headerName": "Customer"},
+    {"field": "importe", "headerName": "Amount", "tipo": "dinero"},
+    {"field": "vence", "headerName": "Due", "sort": "desc"},
+    {"field": "pagada", "headerName": "Paid"},
+    {"field": "retraso", "headerName": "Days late", "tipo": "retraso"},
+]
+
+
+def tarjeta_de(iid: str, d):
+    """La tarjeta que aprueba el dueño para esta decisión (descuento o plan por encima del límite), o None."""
+    if d is not None and d.action in (DISCOUNT, PLAN) and d.needs_approval:
+        return (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
+    return None
+
+
+def aprobacion(iid: str, d, prefijo: str = "") -> None:
+    req = tarjeta_de(iid, d)
+    if req is None:
+        return
+    if req.fingerprint in book.pending:
+        st.info(md(f"Gives away {usd(req.amount, 2)}: above the {usd(POLICY.autonomous_discount_limit)} "
+                   "the agent may give on its own." if d.action == DISCOUNT else
+                   f"Changes the invoice's terms: {usd(req.amount, 2)} now, the rest "
+                   f"{POLICY.plan_rest_days} days later."), title="Needs your approval",
+                icon=":material/approval:")
+        b = st.container(horizontal=True)
+        if prefijo:  # en el detalle (que se repinta solo): decidir y repintar toda la pantalla, que lo cierra
+            for si, texto, extra in ((True, "Approve", {"type": "primary", "icon": ":material/check:"}),
+                                     (False, "Reject", {"icon": ":material/close:"})):
+                if b.button(texto, key=f"{prefijo}{'ok' if si else 'no'}-{iid}", **extra):
+                    decidir(req.fingerprint, si)
+                    st.rerun()
+            return
+        b.button("Approve", key=f"ok-{iid}", type="primary", icon=":material/check:",
+                 on_click=decidir, args=(req.fingerprint, True))
+        b.button("Reject", key=f"no-{iid}", icon=":material/close:",
+                 on_click=decidir, args=(req.fingerprint, False))
+    elif req.fingerprint in book.granted:
+        st.caption(":material/verified: Approved by the owner")
+
+
+def filas_trabajo() -> list[dict]:
+    filas = []
+    for iid, cliente, importe, vence, _ in FACTURAS:
+        d, estado = decision.get(iid), s.estados.get(iid)
+        etiqueta, color, _ = ACCION[d.action] if d else (("Paid: nothing to do" if estado in PAGADA else ""), "green", "")
+        req = tarjeta_de(iid, d)
+        filas.append({"id": iid, "factura": iid, "cliente": cliente, "importe": importe,
+                      "cobrado": (s.cobrado_por or {}).get(iid, 0.0), "vence": vence, "estado": estado,
+                      "accion": etiqueta, "color": color, "motivo": d.reason if d else "",
+                      "p_antes": d.p_before if d else None, "p_despues": d.p_after if d else None,
+                      "aviso": "Needs you" if req and req.fingerprint in book.pending else ""})
+    return filas
+
+
+def filas_historial() -> list[dict]:
+    return [{"id": numero, "numero": numero, "cliente": f.customer, "importe": f.amount, "vence": f.due.isoformat(),
+             "pagada": f.paid.isoformat() if f.paid else "", "retraso": f.days_late}
+            for numero, f in numerar(HISTORIAL_MODELO)]
+
+
+@st.dialog("Invoice details", width="medium")
+def detalle_factura(iid: str) -> None:
+    _, cliente, importe, vence, concepto = next(f for f in FACTURAS if f[0] == iid)
+    estado, d = s.estados.get(iid), decision.get(iid)
+    st.markdown(f"### {iid} · {cliente}")
+    st.caption(md(f"{concepto} · {usd(importe)} · "
+                  + (f"{-vence} days overdue" if vence < 0 else f"due in {vence} days")
+                  + (f" · in PayPal: {estado.replace('_', ' ').lower()}" if estado else " · not in PayPal yet")))
+    if d is None:
+        st.success(md(f"Paid: {usd((s.cobrado_por or {}).get(iid, 0.0))} collected. Nothing left to do."),
+                   icon=":material/check_circle:")
+        return
+    etiqueta, color, icono = ACCION[d.action]
+    st.badge(etiqueta, icon=icono, color=color)
+    st.markdown(md(d.reason))
+    st.progress(d.p_after, text=f"On-time odds {d.p_before:.0%}" + (f" → {d.p_after:.0%}" if d.p_after != d.p_before else ""))
+    pagadas, tarde = POR_CLIENTE[cliente]
+    st.caption(f":material/history: {cliente}'s history: {pagadas} paid invoices, {tarde} of them late "
+               f"({ORIGEN_HISTORIAL})")
+    aprobacion(iid, d, prefijo="dlg-")
+    ids = facturas_de(ronda)
+    if iid in ids and not SIMULADO:
+        st.link_button("Open in PayPal", f"https://www.sandbox.paypal.com/invoice/p/#{ids[iid]}",
+                       icon=":material/open_in_new:", type="tertiary")
+
 
 def grafica_caja(s) -> None:
     """La caja de cada día hasta las nóminas: la banda del 90 % de los escenarios con el plan y sin hacer nada."""
@@ -273,6 +380,13 @@ def grafica_caja(s) -> None:
 
 
 with facturas:
+    st.markdown("**Worklist** · every invoice and the agent's call on it. Sort or filter any column, or click a row "
+                "for the details.")
+    total = {"id": "total", "factura": "Total", "importe": sum(f[2] for f in FACTURAS),
+             "cobrado": sum((s.cobrado_por or {}).values())}
+    elegida = tabla(filas_trabajo(), COLUMNAS_TRABAJO, key="lista_facturas", total=total, clic=True)
+    if elegida:
+        detalle_factura(elegida)
     ids = facturas_de(ronda)
     cols = st.columns(3)
     for n, (iid, cliente, importe, vence, concepto) in enumerate(FACTURAS):
@@ -303,21 +417,7 @@ with facturas:
                 pagadas, tarde = POR_CLIENTE[cliente]
                 st.caption(f":material/history: {cliente}'s history: {pagadas} paid invoices"
                            + (" in PayPal" if "PayPal" in ORIGEN_HISTORIAL else "") + f", {tarde} of them late")
-                if d.action in (DISCOUNT, PLAN) and d.needs_approval:
-                    req = (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
-                    if req.fingerprint in book.pending:
-                        st.info(md(f"Gives away {usd(req.amount, 2)}: above the {usd(POLICY.autonomous_discount_limit)} "
-                                   "the agent may give on its own." if d.action == DISCOUNT else
-                                   f"Changes the invoice's terms: {usd(req.amount, 2)} now, the rest "
-                                   f"{POLICY.plan_rest_days} days later."), title="Needs your approval",
-                                icon=":material/approval:")
-                        b = st.container(horizontal=True)
-                        b.button("Approve", key=f"ok-{iid}", type="primary", icon=":material/check:",
-                                 on_click=decidir, args=(req.fingerprint, True))
-                        b.button("Reject", key=f"no-{iid}", icon=":material/close:",
-                                 on_click=decidir, args=(req.fingerprint, False))
-                    elif req.fingerprint in book.granted:
-                        st.caption(":material/verified: Approved by the owner")
+                aprobacion(iid, d)
             if iid in ids and not SIMULADO:
                 st.link_button("Open in PayPal", f"https://www.sandbox.paypal.com/invoice/p/#{ids[iid]}",
                                icon=":material/open_in_new:", type="tertiary")
@@ -393,3 +493,5 @@ with reglas:
                         "a person decides", ORIGEN_HISTORIAL,
                         "compares its forecasts with what happened, invoice by invoice and week by week, and "
                         "corrects them; this studio has no track record yet, so it uses the assumptions above"]})
+    st.markdown(f"**The payment history the forecast learns from** · {ORIGEN_HISTORIAL}")
+    tabla(filas_historial(), COLUMNAS_HISTORIAL, key="historial", alto=360, buscador=True)
