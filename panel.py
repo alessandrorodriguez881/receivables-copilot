@@ -7,7 +7,7 @@ lectura de Claude de verdad. Nunca enseña claves ni tokens.
 Uso (desde la carpeta app/):  python -m streamlit run panel.py
 """
 import contextlib
-from datetime import date
+from datetime import date, datetime
 import io
 import os
 from pathlib import Path
@@ -17,7 +17,8 @@ import pandas as pd
 import streamlit as st
 
 import preparar_facturas
-from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobro, ejecutar, situacion, tarjeta_descuento,
+from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, situacion,
+                  tarjeta_descuento,
                   tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
                        POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales, notas_de,
@@ -68,7 +69,9 @@ def con_claude() -> bool:
     return bool(read_env(ENV).get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
 
 
-for k, v in (("log", []), ("cambios", None), ("error", None), ("resumen_ia", "")):
+VIGILANCIA = 8  # segundos entre dos miradas a PayPal en busca de cobros
+for k, v in (("log", []), ("cambios", None), ("error", None), ("resumen_ia", ""), ("vistos", None),
+             ("plan_visto", None)):
     st.session_state.setdefault(k, v)
 
 rail = get_rail()
@@ -118,11 +121,33 @@ def actuar(log) -> None:
 
 
 def paga_fabrikam(log) -> None:
-    antes = situacion(rail, ronda, senales or [])
+    """El cliente paga en PayPal. El agente no se entera por este botón: lo ve al mirar PayPal (`vigilar_cobros`)."""
     cobro(rail, libro, ronda, "INV-103", log)
-    despues = situacion(rail, ronda, senales or [])
-    st.session_state.cambios = {"lineas": cambios(antes.plan, despues.plan),
-                                "antes": antes.plan.p_short, "despues": despues.plan.p_short}
+
+
+@st.fragment(run_every=VIGILANCIA)
+def vigilar_cobros() -> None:
+    """Mira PayPal cada pocos segundos. Si entra dinero en una factura (lo pague el cliente en PayPal o lo registre
+    alguien allí), el agente lo ve solo y recalcula el plan, sin que nadie pulse nada."""
+    vistos = st.session_state.vistos
+    try:
+        ahora = cobrado_en_paypal(rail, ronda)
+    except PayPalError:
+        st.caption(":material/sensors_off: Could not reach PayPal; trying again in a few seconds")
+        return
+    nuevos = [] if vistos is None else [i for i, v in ahora.items() if v > vistos.get(i, 0.0) + 0.005]
+    if nuevos and st.session_state.plan_visto is not None:
+        antes, despues = st.session_state.plan_visto, situacion(rail, ronda, senales or []).plan
+        st.session_state.cambios = {"lineas": cambios(antes, despues), "antes": antes.p_short,
+                                    "despues": despues.p_short,
+                                    "detectado": [f"{i} ({CONCEPTO[i][0]})" for i in nuevos]}
+        st.session_state.log = (["**Payment detected in PayPal**"]
+                                + [f"{i}: {CONCEPTO[i][0]} paid {ahora[i] - vistos.get(i, 0.0):,.2f} USD; plan recomputed"
+                                   for i in nuevos] + st.session_state.log)
+        st.session_state.vistos = ahora
+        st.rerun()
+    st.caption(f":material/sensors: Watching PayPal for payments every {VIGILANCIA} s · last check "
+               f"{datetime.now():%H:%M:%S}")
 
 
 def decidir(fp: str, si: bool) -> None:
@@ -150,6 +175,8 @@ with st.sidebar:
         pulsado = ("Fabrikam pays its invoice", paga_fabrikam)
     st.caption("After approving the discount, press 3 again to apply it." if lista
                else "Press 1 first: this round does not have its 5 invoices in PayPal yet.")
+    if lista:
+        vigilar_cobros()
     with st.expander("Agent log", icon=":material/receipt_long:"):
         for linea in st.session_state.log[:40]:
             if linea.startswith("**"):
@@ -185,6 +212,7 @@ if st.session_state.error:
 
 s = situacion(rail, ronda, senales or [])
 decision = {d.invoice_id: d for d in s.plan.decisions}
+st.session_state.vistos, st.session_state.plan_visto = dict(s.cobrado_por or {}), s.plan  # lo que ya sabe el agente
 
 # ---------- cabecera: el día de las nóminas ----------
 c1, c2, c3, c4 = st.columns(4)
@@ -206,7 +234,9 @@ if s.plan.notes:
 if st.session_state.cambios:
     c = st.session_state.cambios
     lineas = "; ".join(f"**{i}** {ACCION[a][0].lower()} → {ACCION[b][0].lower()}" for i, a, b in c["lineas"]) or "nothing"
-    st.success(md(f"Payment received. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
+    origen = (f" in PayPal: {', '.join(c['detectado'])}. The agent spotted it on its own (it checks PayPal every "
+              f"{VIGILANCIA} s) and re-planned" if c.get("detectado") else "")
+    st.success(md(f"Payment received{origen}. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
                   f"The agent only reopened what the new cash changes: {lineas}."), icon=":material/savings:")
 
 facturas, bandeja, actividad, reglas = st.tabs(["Invoices", "Inbox", "Activity in PayPal", "How it decides"])

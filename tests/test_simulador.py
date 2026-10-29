@@ -103,3 +103,13 @@ def test_a_customer_who_asks_for_time_gets_a_payment_plan_in_paypal(demo_sin_cla
     pid = escenario.facturas_de(ronda)["INV-101"]
     parcial = rail.get_invoice(pid)["configuration"]["partial_payment"]
     assert parcial["allow_partial_payment"] and parcial["minimum_amount_due"]["value"] == "1250.00"
+
+
+def test_the_agent_sees_a_payment_by_reading_paypal(demo_sin_claves):
+    """Lo que mira la pantalla cada pocos segundos: lo cobrado de cada factura, leído de PayPal."""
+    from demo import cobrado_en_paypal
+    rail, ronda, tmp = demo_sin_claves
+    assert set(cobrado_en_paypal(rail, ronda).values()) == {0.0}
+    cobro(rail, Ledger(tmp / "ledger.json"), ronda, "INV-103", log=lambda m: None)  # el cliente paga en PayPal
+    ahora = cobrado_en_paypal(rail, ronda)
+    assert ahora["INV-103"] == 8_000 and sum(ahora.values()) == 8_000

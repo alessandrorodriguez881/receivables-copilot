@@ -27,7 +27,7 @@ Press the sidebar buttons in order:
 | **2 · Read customer replies** | Litware's dispute and Contoso's confirmation are recorded with their exact quotes; the fake "Fabrikam finance" email is ignored. Claude writes the reminder for the overdue invoice. Doing nothing would now leave a 12.8% risk; the new plan keeps it at 4.9% |
 | **3 · Act on the plan** | The reminder goes out; Litware goes to a person; the $160 discount for Fabrikam waits for you |
 | **Approve**, then **3** again | The 2% discount is added to Fabrikam's invoice |
-| **4 · Fabrikam pays** | $7,840 arrives. Short-risk 4.9% → **0%**; the only change is that the overdue reminder is no longer needed |
+| **4 · Fabrikam pays** | $7,840 is paid on the invoice in PayPal. Nothing tells the agent: it reads PayPal (on every screen refresh and every 8 seconds), spots the payment and re-plans. Short-risk 4.9% → **0%**; the only change is that the overdue reminder is no longer needed |
 
 **Proof it ran on the real sandbox:** [`evidencia/recibo_r20261028-132115.md`](evidencia/recibo_r20261028-132115.md) lists every action of a real demo round with its PayPal invoice id, re-queried from PayPal (discount on the invoice, payment found, MARKED_AS_PAID).
 
@@ -45,7 +45,7 @@ Northbeam Studio (fictional) has $3,500 in cash and a $10,500 payroll in 7 days.
    - A reminder for Contoso's overdue invoice.
    - Without reading the replies, the agent would have offered a discount to the customer who was disputing.
 4. **The owner approves.** The discount is added to the invoice in PayPal.
-5. **Fabrikam pays $7,840.** The agent re-plans: cash covers payroll, and the only decision that changes is that the overdue reminder is no longer needed.
+5. **Fabrikam pays $7,840 in PayPal.** The screen reads every invoice from PayPal every 8 seconds; when the amount paid on one goes up, however it got there, the agent re-plans on its own. Cash covers payroll, and the only decision that changes is that the overdue reminder is no longer needed.
 
 ## How it decides
 
@@ -174,7 +174,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 75 tests). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 78 tests). The engine lives in `motor_comun/`.
 
 ## Use of AI
 

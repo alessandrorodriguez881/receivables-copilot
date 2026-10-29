@@ -39,6 +39,11 @@ def _cobrado(factura: dict) -> float:
     return round(total - falta, 2)
 
 
+def cobrado_en_paypal(rail: PayPalRail, ronda: str) -> dict[str, float]:
+    """Lo cobrado de cada factura de la ronda, leído de PayPal ahora mismo (sin recalcular el plan: es barato)."""
+    return {iid: _cobrado(rail.get_invoice(pid)) for iid, pid in facturas_de(ronda).items()}
+
+
 def situacion(rail: PayPalRail, ronda: str, senales: list) -> Situacion:
     estados, por, cobradas = {}, {}, set()
     for iid, pid in facturas_de(ronda).items():
