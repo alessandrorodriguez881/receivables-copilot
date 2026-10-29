@@ -142,7 +142,8 @@ const TIPOS = {
 };
 
 function columnas(defs) {
-  return defs.map(({ tipo, decimales, ...c }) => ({ ...c, ...(TIPOS[tipo] ? TIPOS[tipo]({ ...c, decimales }) : {}) }));
+  // Lo que pone cada columna en Python manda sobre lo de su tipo (p. ej. "filter": false en una columna de dinero)
+  return defs.map(({ tipo, decimales, ...c }) => ({ ...(TIPOS[tipo] ? TIPOS[tipo]({ ...c, decimales }) : {}), ...c }));
 }
 
 function tema(ag) {
@@ -172,9 +173,8 @@ function crear(ag, estado, parentElement) {
     rowData: d.filas,
     pinnedBottomRowData: d.total ? [d.total] : [],
     getRowId: (p) => String(p.data.id),
-    // El filtro está en el menú de cada columna (al pasar el ratón): así los títulos caben enteros
-    defaultColDef: { sortable: true, filter: true, suppressHeaderFilterButton: true, resizable: true,
-                     enableCellChangeFlash: true, minWidth: 80, flex: 1 },
+    // Cada columna con filtro lleva su botón en la cabecera; Python lo quita donde no sirve ("filter": False)
+    defaultColDef: { sortable: true, filter: true, resizable: true, enableCellChangeFlash: true, minWidth: 80, flex: 1 },
     domLayout: d.alto ? "normal" : "autoHeight",
     rowSelection: d.clic ? { mode: "singleRow", checkboxes: false, enableClickSelection: true } : undefined,
     onRowClicked: (e) => {

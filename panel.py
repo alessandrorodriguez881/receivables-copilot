@@ -14,7 +14,9 @@ from pathlib import Path
 
 import altair as alt
 import pandas as pd
+import requests
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 import preparar_facturas
 from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, situacion,
@@ -25,6 +27,7 @@ from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS,
                        notas_de,
                        ronda_actual, senales_de)
 from agente_ia import GRABACION
+from agente_ia import resumen as plan_para_claude
 from historial_paypal import numerar
 from modo import SIMULADO, conectar
 from rail_paypal import PayPalError, PayPalRail, read_env
@@ -73,7 +76,7 @@ def con_claude() -> bool:
 
 
 VIGILANCIA = 8  # segundos entre dos miradas a PayPal en busca de cobros
-for k, v in (("log", []), ("cambios", None), ("error", None), ("resumen_ia", ""), ("vistos", None),
+for k, v in (("log", []), ("cambios", None), ("error", None), ("resumen_ia", ""), ("plan_ia", None), ("vistos", None),
              ("plan_visto", None)):
     st.session_state.setdefault(k, v)
 
@@ -91,6 +94,7 @@ senales = senales_de(ronda)
 def reiniciar(log) -> None:
     preparar_facturas.main(log)
     st.session_state.cambios = None
+    st.session_state.resumen_ia, st.session_state.plan_ia = "", None  # el resumen era de la ronda anterior
 
 
 def leer(log) -> None:
@@ -112,6 +116,7 @@ def leer(log) -> None:
             guardar_grabacion(bandeja, st.session_state.resumen_ia, date.today())
     else:
         st.session_state.resumen_ia = repetir_grabacion(bandeja)
+    st.session_state.plan_ia = bandeja.plan  # sobre este plan escribió Claude su resumen
     guardar_senales(ronda, bandeja.senales)
     guardar_notas(ronda, bandeja.notas)
     for paso in bandeja.registro:
@@ -128,6 +133,12 @@ def paga_fabrikam(log) -> None:
     cobro(rail, libro, ronda, "INV-103", log)
 
 
+def solo_el_vigilante() -> bool:
+    """¿Está Streamlit repintando solo el vigilante (lo ha despertado su temporizador), no la página entera? En una
+    pasada entera, la página se dibuja después ya con el cobro: volver a empezar perdería el clic que la provocó."""
+    return bool(getattr(get_script_run_ctx(), "fragment_ids_this_run", None))
+
+
 @st.fragment(run_every=VIGILANCIA)
 def vigilar_cobros() -> None:
     """Mira PayPal cada pocos segundos. Si entra dinero en una factura (lo pague el cliente en PayPal o lo registre
@@ -135,12 +146,14 @@ def vigilar_cobros() -> None:
     vistos = st.session_state.vistos
     try:
         ahora = cobrado_en_paypal(rail, ronda)
-    except PayPalError:
+        nuevos = [] if vistos is None else [i for i, v in ahora.items() if v > vistos.get(i, 0.0) + 0.005]
+        if nuevos and st.session_state.plan_visto is not None:
+            despues = situacion(rail, ronda, senales or []).plan
+    except (PayPalError, requests.RequestException):  # sin red (o PayPal caído): la pantalla sigue, y se reintenta
         st.caption(":material/sensors_off: Could not reach PayPal; trying again in a few seconds")
         return
-    nuevos = [] if vistos is None else [i for i, v in ahora.items() if v > vistos.get(i, 0.0) + 0.005]
     if nuevos and st.session_state.plan_visto is not None:
-        antes, despues = st.session_state.plan_visto, situacion(rail, ronda, senales or []).plan
+        antes = st.session_state.plan_visto
         st.session_state.cambios = {"lineas": cambios(antes, despues), "antes": antes.p_short,
                                     "despues": despues.p_short,
                                     "detectado": [f"{i} ({CONCEPTO[i][0]})" for i in nuevos]}
@@ -148,7 +161,8 @@ def vigilar_cobros() -> None:
                                 + [f"{i}: {CONCEPTO[i][0]} paid {ahora[i] - vistos.get(i, 0.0):,.2f} USD; plan recomputed"
                                    for i in nuevos] + st.session_state.log)
         st.session_state.vistos = ahora
-        st.rerun()
+        if solo_el_vigilante():
+            st.rerun()
     st.caption(f":material/sensors: Watching PayPal for payments every {VIGILANCIA} s · last check "
                f"{datetime.now():%H:%M:%S}")
 
@@ -192,7 +206,8 @@ st.caption(f"{ESTUDIO} · a collections agent for PayPal invoices that decides w
            "to ask you first")
 if SIMULADO:
     st.info("No PayPal keys here, so a built-in simulator answers the same PayPal Invoicing API calls. With sandbox "
-            "keys in `.env`, the same buttons create, remind and update real invoices in the PayPal sandbox.",
+            "keys in `.env`, the same buttons create, remind and update real invoices in the PayPal sandbox. "
+            "**Run the demo with steps 2 to 4 in the sidebar** (on a phone, open it with » at the top left).",
             icon=":material/science:")
 
 # Huecos fijos para lo que aparece y desaparece (progreso, errores, avisos): así lo de abajo no cambia de sitio y
@@ -220,6 +235,13 @@ s = situacion(rail, ronda, senales or [])
 decision = {d.invoice_id: d for d in s.plan.decisions}
 st.session_state.vistos, st.session_state.plan_visto = dict(s.cobrado_por or {}), s.plan  # lo que ya sabe el agente
 
+def tarjeta_de(iid: str, d):
+    """La tarjeta que aprueba el dueño para esta decisión (descuento o plan por encima del límite), o None."""
+    if d is not None and d.action in (DISCOUNT, PLAN) and d.needs_approval:
+        return (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
+    return None
+
+
 # ---------- cabecera: el día de las nóminas ----------
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(f"{NEED.what.capitalize()} in {NEED.day} days", usd(NEED.amount), border=True, height="stretch",
@@ -230,8 +252,8 @@ c3.metric("Chance of being short on payday", f"{s.plan.p_short:.1%}",
           round((s.plan.p_short - s.plan.p_short_if_wait) * 100, 1), delta_color="inverse",
           delta_description="pts vs doing nothing", border=True, height="stretch",
           help=f"Simulated over 5,000 scenarios of when each customer pays. The policy allows {POLICY.max_short_prob:.0%}.")
-pendientes = [(fp, r) for fp, r in book.pending.items() if r.evidence[:1] == (f"ronda:{ronda}",)]
-c4.metric("Waiting for your approval", len(pendientes), border=True, height="stretch",
+esperan = [iid for iid, d in decision.items() if (req := tarjeta_de(iid, d)) and req.fingerprint in book.pending]
+c4.metric("Waiting for your approval", len(esperan), border=True, height="stretch",
           help=f"Discounts above {usd(POLICY.autonomous_discount_limit)} need you")
 
 avisos = st.container()
@@ -248,15 +270,15 @@ if st.session_state.cambios:
 facturas, bandeja, actividad, reglas = st.tabs(["Invoices", "Inbox", "Activity in PayPal", "How it decides"])
 PAGADA = ("PAID", "MARKED_AS_PAID")
 COLUMNAS_TRABAJO = [
-    {"field": "factura", "headerName": "Invoice", "pinned": "left", "flex": 0, "width": 95},
-    {"field": "cliente", "headerName": "Customer", "flex": 0, "width": 105},
-    {"field": "importe", "headerName": "Amount", "tipo": "dinero", "flex": 0, "width": 100},
-    {"field": "vence", "headerName": "Due", "tipo": "dias", "flex": 0, "width": 145},
-    {"field": "estado", "headerName": "In PayPal", "tipo": "estado", "flex": 0, "width": 130,
+    {"field": "factura", "headerName": "Invoice", "pinned": "left", "flex": 0, "width": 95, "filter": False},
+    {"field": "cliente", "headerName": "Customer", "flex": 0, "width": 125},
+    {"field": "importe", "headerName": "Amount", "tipo": "dinero", "flex": 0, "width": 100, "filter": False},
+    {"field": "vence", "headerName": "Due", "tipo": "dias", "flex": 0, "width": 155},
+    {"field": "estado", "headerName": "In PayPal", "tipo": "estado", "flex": 0, "width": 140,
      "headerTooltip": "The invoice's status in PayPal, and what has been paid on it"},
-    {"field": "accion", "headerName": "Agent's call", "tipo": "accion", "minWidth": 290, "flex": 2,
+    {"field": "accion", "headerName": "Agent's call", "tipo": "accion", "minWidth": 230, "flex": 2,
      "headerTooltip": "What the agent will do, and whether it needs your approval first"},
-    {"field": "p_despues", "headerName": "On-time odds", "tipo": "probabilidad", "minWidth": 150,
+    {"field": "p_despues", "headerName": "On-time odds", "tipo": "probabilidad", "minWidth": 140, "filter": False,
      "headerTooltip": "Chance this invoice is paid on time: before → after the agent's action"},
 ]
 COLUMNAS_HISTORIAL = [
@@ -267,13 +289,6 @@ COLUMNAS_HISTORIAL = [
     {"field": "pagada", "headerName": "Paid"},
     {"field": "retraso", "headerName": "Days late", "tipo": "retraso"},
 ]
-
-
-def tarjeta_de(iid: str, d):
-    """La tarjeta que aprueba el dueño para esta decisión (descuento o plan por encima del límite), o None."""
-    if d is not None and d.action in (DISCOUNT, PLAN) and d.needs_approval:
-        return (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
-    return None
 
 
 def aprobacion(iid: str, d, prefijo: str = "") -> None:
@@ -380,8 +395,8 @@ def grafica_caja(s) -> None:
 
 
 with facturas:
-    st.markdown("**Worklist** · every invoice and the agent's call on it. Sort or filter any column, or click a row "
-                "for the details.")
+    st.markdown("**Worklist** · every invoice and the agent's call on it. Sort any column, filter by customer, due "
+                "date, status or call, or click a row for the details.")
     total = {"id": "total", "factura": "Total", "importe": sum(f[2] for f in FACTURAS),
              "cobrado": sum((s.cobrado_por or {}).values())}
     elegida = tabla(filas_trabajo(), COLUMNAS_TRABAJO, key="lista_facturas", total=total, clic=True)
@@ -432,7 +447,14 @@ with bandeja:
     st.markdown("Customer replies are untrusted data. A reply only counts if it comes from that customer's own "
                 "domain and the quoted sentence is really in it. No tool can mark an invoice paid or stop reminders.")
     if st.session_state.resumen_ia:
-        st.info(md(st.session_state.resumen_ia), title="Claude's briefing for the owner", icon=":material/smart_toy:")
+        if st.session_state.plan_ia is not None and st.session_state.plan_ia != plan_para_claude(s):
+            st.info("Claude wrote its briefing before the latest changes (actions taken or payments received "
+                    "since), so its numbers are out of date. Everything else on this screen is current.",
+                    title="Claude's briefing for the owner", icon=":material/smart_toy:")
+            with st.expander("The briefing as Claude wrote it (out of date)", icon=":material/history:"):
+                st.markdown(md(st.session_state.resumen_ia))
+        else:
+            st.info(md(st.session_state.resumen_ia), title="Claude's briefing for the owner", icon=":material/smart_toy:")
     for iid, (asunto, nota) in notas_de(ronda).items():
         with st.expander(f"Reminder Claude wrote for {iid}: {asunto}", icon=":material/edit_note:"):
             st.text(nota)

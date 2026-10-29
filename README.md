@@ -8,7 +8,9 @@ Freelancers and small studios get paid through PayPal invoices, and payroll does
 - **offer an early-payment discount**;
 - **hand it to a person**.
 
-It does all of it through the PayPal Invoicing API.
+It does all of it through the PayPal Invoicing API, with Claude reading customer replies and writing reminders.
+
+![The worklist after Claude read the replies: Litware's dispute goes to a person, Contoso's promise means no chasing, and a $160 discount for Fabrikam waits for the owner](docs/pantalla.jpg)
 
 ## Try it in 2 minutes, no keys needed
 
@@ -100,11 +102,11 @@ Every action goes to a ledger with its `PayPal-Request-Id`, and every change is 
 The **Invoices** tab opens with a worklist built on [AG Grid Community](https://www.ag-grid.com/) 36.2, inside our own Streamlit component (`tabla_aggrid.py`, Components v2):
 - one row per invoice: amount, due date, its status in PayPal (with what has been paid), the agent's call and the on-time odds before → after acting, drawn by custom cell renderers;
 - hover the agent's call to read its reason; click a row to open the invoice and approve or reject the discount there;
-- sort and filter any column; when a payment lands in PayPal the row updates in place and the changed cells flash.
+- sort any column and filter by customer, due date, status or the agent's call; when a payment lands in PayPal the row updates in place and the changed cells flash.
 
 The **How it decides** tab adds a second grid: the payment history the forecast learns from (every earlier paid invoice, read from PayPal), with a quick filter across all columns.
 
-AG Grid loads from jsDelivr at a pinned version. Without internet the grids say so, and the cards below show the same data.
+AG Grid loads from jsDelivr at a pinned version. Without internet the grids say so; the invoice cards below them still show every decision, with its approval buttons.
 
 ## Traps it handles (each one is an automated test)
 
@@ -114,7 +116,7 @@ AG Grid loads from jsDelivr at a pinned version. Without internet the grids say 
 | A customer disputes an invoice | No reminder, no discount: a person decides | `test_after_the_replies_a_dispute_goes_to_a_person_and_a_promise_is_respected` |
 | A customer already promised a date | It stops chasing that invoice | `test_copilot_reading_replies_never_presses_a_dispute_or_a_promise` |
 | A customer asks for more time (with payment plans turned on) | No reminder, no discount: a payment plan the owner approves, and the PayPal invoice accepts partial payments | `test_a_customer_who_asks_for_time_gets_a_payment_plan_in_paypal` |
-| A reply that names one invoice | Moves only that invoice, not the customer's others | `test_each_reply_only_touches_the_invoices_it_names` |
+| A reply that names one invoice | Only that invoice is marked as disputed or promised; the customer's other invoices are still chased as usual (their odds do improve) | `test_each_reply_only_touches_the_invoices_it_names` |
 | Claude writes a reminder with a link, bank details or a discount | Rejected by code (anti-phishing) | `test_reminders_cannot_promise_discounts_links_or_other_payment_routes` |
 | Claude drafts a reminder the plan did not ask for | Rejected by code | `test_a_reminder_needs_the_plan_and_only_for_invoices_it_says_to_remind` |
 | A discount above the owner's limit | Waits for the owner, then goes out once | `test_the_big_discount_waits_for_the_owner_and_then_goes_out_once` |
@@ -163,7 +165,7 @@ Full write-up, including earlier versions and what failed: `RESULTADOS_SIMULACIO
 - Every write carries a `PayPal-Request-Id`, so a retry never sends a second email or records a second payment.
 - **Read back from PayPal:** each customer's payment history (52 paid invoices, listed and read through Invoicing v2).
 - **Simulated:** the customer paying, which is recorded as an external payment on the invoice. Also synthetic: the studio, the replies, and the history itself. We loaded the history into the sandbox once as paid invoices (sent without emailing anyone, each payment recorded on its real date), and the agent reads it back the way it would read a real account.
-- **Demo mode (no keys):** `simulador_paypal.py` plays the PayPal sandbox under the same wrapper, and Claude's step replays a recorded real run (recorded on the simulator, from the demo's starting invoices). Claude's briefing is shown only if the plan on screen is the one Claude saw; if not (say, a customer already paid), the screen says so instead. `RC_GRABAR=1` with a Claude key records a new run. The screen says so in a banner. It keeps its own ledger (`data_simulada/`), apart from the real sandbox's.
+- **Demo mode (no keys):** `simulador_paypal.py` plays the PayPal sandbox under the same wrapper, and Claude's step replays a recorded real run (recorded on the simulator, from the demo's starting invoices). Claude's briefing is shown as current only while the plan on screen is the one Claude saw; once it changes (say, a customer pays), the screen says the briefing is out of date and keeps it folded away. `RC_GRABAR=1` with a Claude key records a new run. The screen says so in a banner. It keeps its own ledger (`data_simulada/`), apart from the real sandbox's.
 
 ## Run it
 
