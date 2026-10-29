@@ -91,10 +91,14 @@ def ejecutar(rail: PayPalRail, libro: Ledger, book: ApprovalBook, s: Situacion, 
     """Hace en PayPal lo que dice el plan. Cada acción va al libro con su PayPal-Request-Id: nunca dos veces.
 
     notas: los recordatorios que escribió Claude (ya comprobados); si falta uno, se usa la plantilla."""
+    libro.require_intact()  # con el libro o su registro tocados a mano, no se toca ninguna factura
     ids = facturas_de(ronda)
     vencimiento = {i: d for i, _, _, d, _ in FACTURAS}
     for d in s.plan.decisions:
-        pid = ids[d.invoice_id]
+        pid = ids.get(d.invoice_id)
+        if not pid:  # la ronda no llegó a crear esta factura (paso 1 sin terminar)
+            log(f"{d.invoice_id}: not in PayPal in this round; start a new round first")
+            continue
         if d.action == ESCALATE:
             log(f"{d.invoice_id}: {d.reason}")
         elif d.action == REMIND:
@@ -192,7 +196,10 @@ def aplicar_descuento(rail: PayPalRail, libro: Ledger, book: ApprovalBook, d, pi
 
 def cobro(rail: PayPalRail, libro: Ledger, ronda: str, iid: str, log=print) -> float:
     """Sandbox: hace de cliente que paga lo que debe hoy (un pago externo registrado en la factura)."""
-    pid = facturas_de(ronda)[iid]
+    pid = facturas_de(ronda).get(iid)
+    if not pid:
+        log(f"{iid}: not in PayPal in this round; start a new round first")
+        return 0.0
     debe = float(rail.get_invoice(pid).get("due_amount", {}).get("value", 0))
     try:
         e = libro.begin(f"payment:{ronda}:{iid}", "payment", debe, "USD", CONCEPTO[iid][0])

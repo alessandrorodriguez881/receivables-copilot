@@ -10,6 +10,7 @@ import contextlib
 from datetime import date
 import io
 import os
+from pathlib import Path
 
 import altair as alt
 import pandas as pd
@@ -40,6 +41,12 @@ ACCION = {  # etiqueta, color e icono de cada decisión
 }
 NEED = NECESIDADES[0]
 TEAL, GRIS, ROJO = "#0F766E", "#A1A1AA", "#DC2626"  # los de .streamlit/config.toml
+
+
+def comprobar_auditoria() -> str:
+    """La orden que comprueba este mismo libro desde la consola (en el modo demo, cada visitante tiene su carpeta)."""
+    carpeta = Path(os.path.relpath(DATA, Path(__file__).parent)).as_posix() if SIMULADO else ""
+    return f"python verificar_auditoria.py {carpeta}".rstrip()
 
 
 @st.cache_resource
@@ -88,14 +95,15 @@ def leer(log) -> None:
         log("msg-203 ignored: not sent from one of your customers' domains")
         return
     import anthropic
-    from agente_ia import Bandeja, cliente, guardar_grabacion, leer_bandeja, repetir_grabacion, resumen
+    from agente_ia import GRABAR, Bandeja, cliente, guardar_grabacion, leer_bandeja, repetir_grabacion, resumen
     bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss)))
     if con_claude():
         try:
             st.session_state.resumen_ia = leer_bandeja(cliente(ENV), bandeja)
         except anthropic.APIError as e:
             raise RuntimeError(f"Claude could not read the replies ({type(e).__name__}). Nothing was sent") from e
-        guardar_grabacion(bandeja, st.session_state.resumen_ia, date.today())
+        if GRABAR:
+            guardar_grabacion(bandeja, st.session_state.resumen_ia, date.today())
     else:
         st.session_state.resumen_ia = repetir_grabacion(bandeja)
     guardar_senales(ronda, bandeja.senales)
@@ -123,6 +131,7 @@ def decidir(fp: str, si: bool) -> None:
 
 
 pulsado = None
+lista = len(facturas_de(ronda)) == len(FACTURAS)  # la ronda tiene sus 5 facturas en PayPal (paso 1 terminado)
 pagada = any(e.status == "COMPLETED" for e in libro.attempts(f"payment:{ronda}:INV-103"))
 with st.sidebar:
     st.header("Run the demo")
@@ -132,13 +141,15 @@ with st.sidebar:
         pulsado = ("Creating and sending the invoices in PayPal", reiniciar)
     if st.button("2 · Read customer replies" + ("" if con_claude() else " (replay of a real Claude run)"
                                                 if GRABACION.exists() else " (rehearsal)"), icon=":material/mail:",
-                 width="stretch", disabled=senales is not None):
+                 width="stretch", disabled=senales is not None or not lista):
         pulsado = ("Reading customer replies", leer)
-    if st.button("3 · Act on the plan", icon=":material/play_arrow:", type="primary", width="stretch"):
+    if st.button("3 · Act on the plan", icon=":material/play_arrow:", type="primary", width="stretch",
+                 disabled=not lista):
         pulsado = ("Acting on the plan in PayPal", actuar)
-    if st.button("4 · Fabrikam pays", icon=":material/payments:", width="stretch", disabled=pagada):
+    if st.button("4 · Fabrikam pays", icon=":material/payments:", width="stretch", disabled=pagada or not lista):
         pulsado = ("Fabrikam pays its invoice", paga_fabrikam)
-    st.caption("After approving the discount, press 3 again to apply it.")
+    st.caption("After approving the discount, press 3 again to apply it." if lista
+               else "Press 1 first: this round does not have its 5 invoices in PayPal yet.")
     with st.expander("Agent log", icon=":material/receipt_long:"):
         for linea in st.session_state.log[:40]:
             if linea.startswith("**"):
@@ -316,7 +327,7 @@ with actividad:
         st.success(f"Audit trail verified: {chequeo.events} events, each chained to the one before by its hash, "
                    "and the ledger matches them"
                    + (f" ({chequeo.before_trail} older entries predate the trail)" if chequeo.before_trail else "")
-                   + ". Check it yourself: python verificar_auditoria.py", icon=":material/verified_user:")
+                   + f". Check it yourself: {comprobar_auditoria()}", icon=":material/verified_user:")
     else:
         st.error(f"Audit trail check failed: {chequeo.problem}", icon=":material/gpp_bad:")
     hechos = [e for e in libro.entries if f":{ronda}:" in e.op_key and e.status == "COMPLETED"]

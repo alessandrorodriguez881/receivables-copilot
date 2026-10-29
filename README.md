@@ -111,7 +111,7 @@ Every action goes to a ledger with its `PayPal-Request-Id`, and every change is 
 | The evidence changes after an approval | A new approval is needed | `test_new_evidence_needs_a_new_approval` |
 | PayPal fails while sending a reminder | Retried with the same `PayPal-Request-Id`: never two emails | `test_a_failed_reminder_is_retried_with_the_same_request_id` |
 | A payment is recorded twice | Recorded once; the plan relaxes | `test_a_payment_is_recorded_once_and_the_plan_relaxes` |
-| Someone edits the ledger or its audit trail | The hash chain or the ledger check fails | `test_the_audit_trail_catches_an_edited_event_and_a_ledger_changed_by_hand` (shared engine) |
+| Someone edits, deletes or adds a ledger entry, or edits its audit trail | The hash chain or the ledger check fails, and the agent touches no invoice until a person looks | `test_the_audit_trail_catches_an_edited_event_and_a_ledger_changed_by_hand` (shared engine) |
 
 ## Evidence: 1,000 simulated weeks
 
@@ -152,7 +152,7 @@ Full write-up, including earlier versions and what failed: `RESULTADOS_SIMULACIO
 - Every write carries a `PayPal-Request-Id`, so a retry never sends a second email or records a second payment.
 - **Read back from PayPal:** each customer's payment history (52 paid invoices, listed and read through Invoicing v2).
 - **Simulated:** the customer paying, which is recorded as an external payment on the invoice. Also synthetic: the studio, the replies, and the history itself. We loaded the history into the sandbox once as paid invoices (sent without emailing anyone, each payment recorded on its real date), and the agent reads it back the way it would read a real account.
-- **Demo mode (no keys):** `simulador_paypal.py` plays the PayPal sandbox under the same wrapper, and Claude's step replays a recorded real run. The screen says so in a banner. It keeps its own ledger (`data_simulada/`), apart from the real sandbox's.
+- **Demo mode (no keys):** `simulador_paypal.py` plays the PayPal sandbox under the same wrapper, and Claude's step replays a recorded real run (recorded on the simulator, from the demo's starting invoices). Claude's briefing is shown only if the plan on screen is the one Claude saw; if not (say, a customer already paid), the screen says so instead. `RC_GRABAR=1` with a Claude key records a new run. The screen says so in a banner. It keeps its own ledger (`data_simulada/`), apart from the real sandbox's.
 
 ## Run it
 

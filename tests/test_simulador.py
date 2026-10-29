@@ -77,6 +77,9 @@ def test_a_real_claude_run_is_replayed_and_checked_again_by_code(demo_sin_claves
     assert repetir_grabacion(repetida) == "Briefing written by Claude"
     assert repetida.registro[0].startswith("Replay of a real Claude run")
     assert repetida.senales == original.senales and repetida.notas == original.notas
+    # Fabrikam already paid (step 4 before step 2): the briefing's numbers would not be the screen's
+    cobro(rail, Ledger(tmp / "ledger.json"), ronda, "INV-103", log=lambda m: None)
+    assert repetir_grabacion(Bandeja(recalcular)) == agente_ia.NO_CUADRA
 
 
 def test_a_customer_who_asks_for_time_gets_a_payment_plan_in_paypal(demo_sin_claves, monkeypatch):

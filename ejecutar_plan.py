@@ -37,10 +37,11 @@ def main() -> int:
     senales = senales_de(ronda)
     if args.correo and senales is None:
         try:
-            from agente_ia import Bandeja, SinClave, cliente, guardar_grabacion, leer_bandeja, resumen
+            from agente_ia import GRABAR, Bandeja, SinClave, cliente, guardar_grabacion, leer_bandeja, resumen
             bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss)))
             explicacion = leer_bandeja(cliente(ENV), bandeja)
-            guardar_grabacion(bandeja, explicacion, date.today())
+            if GRABAR:
+                guardar_grabacion(bandeja, explicacion, date.today())
             senales = bandeja.senales
             guardar_notas(ronda, bandeja.notas)
             for paso in bandeja.registro:

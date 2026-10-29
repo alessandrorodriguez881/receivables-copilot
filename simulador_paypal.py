@@ -15,10 +15,15 @@ import json
 from pathlib import Path
 import random
 import string
+import threading
 from urllib.parse import urlparse
 
 ABIERTAS = {"SENT", "UNPAID", "PARTIALLY_PAID", "SCHEDULED"}
 RAIZ = "v2/invoicing/invoices"
+
+# En la pantalla, una sola capa (y un solo simulador) atiende a todos los visitantes, cada uno en su carpeta: las
+# llamadas van de una en una, para que una no cargue el estado de un visitante mientras otra guarda el de otro.
+_CANDADO = threading.Lock()
 
 
 class _Error(Exception):
@@ -49,15 +54,21 @@ def _nuevo_id() -> str:
 
 
 class SandboxSimulado:
+    VACIO = {"facturas": {}, "respuestas": {}}
+
     def __init__(self, ruta: Path | None = None):
         self.ruta = ruta
-        self.estado = {"facturas": {}, "respuestas": {}}
+        self.estado = json.loads(json.dumps(self.VACIO))
 
     # ---------- la parte de requests.Session que usa PayPalRail ----------
     def post(self, url, auth=None, data=None, timeout=None, **kw):  # solo el token
         return _Respuesta(200, {"access_token": "simulated-token", "token_type": "Bearer", "expires_in": 32400})
 
     def request(self, method, url, json=None, params=None, headers=None, timeout=None):
+        with _CANDADO:
+            return self._atender(method, url, json, params, headers)
+
+    def _atender(self, method, url, json, params, headers):
         self._cargar()
         ruta = urlparse(url).path.strip("/")
         id_peticion = (headers or {}).get("PayPal-Request-Id")
@@ -81,6 +92,8 @@ class SandboxSimulado:
     def _cargar(self) -> None:
         if self.ruta and self.ruta.exists():
             self.estado = json.loads(self.ruta.read_text(encoding="utf-8"))
+        elif self.ruta:  # visitante nuevo: empieza vacío, sin heredar lo que dejó en memoria el anterior
+            self.estado = json.loads(json.dumps(self.VACIO))
 
     def _guardar(self) -> None:
         if self.ruta:

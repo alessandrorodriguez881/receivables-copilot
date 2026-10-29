@@ -139,17 +139,24 @@ def resumen(s) -> dict:
 
 # La última lectura de Claude de verdad: sin clave (p. ej. en la demo pública), la pantalla repite sus llamadas
 GRABACION = Path(__file__).with_name("grabacion_claude.json")
+GRABAR = os.environ.get("RC_GRABAR") == "1"  # la grabación del repositorio solo se cambia a propósito
+NO_CUADRA = ("Not shown: Claude wrote this briefing for the numbers at the start of a round, and they have "
+             "changed here (for example, a customer has already paid). Everything else on this screen is "
+             "recomputed now by code.")
 
 
 def guardar_grabacion(bandeja: Bandeja, briefing: str, hoy: date) -> None:
+    """Guarda lo que registró Claude, el último plan que vio y su resumen para el dueño."""
     GRABACION.write_text(json.dumps({"date": hoy.isoformat(), "signals": [asdict(s) for s in bandeja.senales],
                                      "reminders": {i: list(n) for i, n in bandeja.notas.items()},
-                                     "briefing": briefing}, indent=2, ensure_ascii=False), encoding="utf-8")
+                                     "plan": bandeja.plan, "briefing": briefing}, indent=2, ensure_ascii=False),
+                         encoding="utf-8")
 
 
 def repetir_grabacion(bandeja: Bandeja) -> str:
     """Repite en `bandeja` las llamadas de la última lectura de Claude de verdad, que el código vuelve a comprobar
-    todas igual que en directo, y devuelve el resumen que escribió Claude."""
+    todas igual que en directo, y devuelve el resumen que escribió Claude, solo si el plan de ahora es el mismo que
+    vio él: si no, sus cifras no serían las de la pantalla."""
     g = json.loads(GRABACION.read_text(encoding="utf-8"))
     bandeja.registro.append(f"Replay of a real Claude run on {g['date']} (no Claude key here): the same tool calls, "
                             "checked again by code")
@@ -159,7 +166,7 @@ def repetir_grabacion(bandeja: Bandeja) -> str:
     bandeja.recompute_plan()
     for iid, (asunto, nota) in g["reminders"].items():
         bandeja.draft_reminder(iid, asunto, nota)
-    return g["briefing"]
+    return g["briefing"] if bandeja.plan == g.get("plan") else NO_CUADRA
 
 
 class SinClave(RuntimeError):

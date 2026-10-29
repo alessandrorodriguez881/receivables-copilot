@@ -16,9 +16,68 @@
   ],
   "reminders": {
     "INV-104": [
-      "Friendly reminder: INV-104 for Social media templates ($1,800)",
-      "Hi Contoso team,\n\nThanks for confirming INV-102, we appreciate it. A quick, friendly reminder that invoice INV-104 for the Social media templates, $1,800, is now 12 days past due. When you have a moment, could you take care of it using the button in this email? If anything is holding it up, just reply and we'll help sort it out.\n\nMany thanks,\nNorthbeam Studio"
+      "Friendly reminder: INV-104 for social media templates ($1,800)",
+      "Hi Contoso team,\n\nThanks for confirming INV-102. We wanted to quickly check on invoice INV-104 too: $1,800 for the social media templates we delivered. It's now 12 days past due. Could you let us know when it's likely to be paid? If anything is holding it up, just reply and we'll be glad to help sort it out.\n\nThanks so much,\nNorthbeam Studio"
     ]
   },
-  "briefing": "I processed three replies, recorded two and wrote the one reminder the plan called for.\n\n- **Cash:** Payroll of $10,500 is due in 7 days and you have $3,500. The chance of being short is 4.9% if you follow the plan, or 12.8% if nothing is done.\n- **Contoso INV-102 ($4,000):** They confirmed it will be paid Friday, so I won't chase it.\n- **Contoso INV-104 ($1,800):** This is 12 days overdue. The reminder is saved and goes out when you act on the plan.\n- **Litware INV-105 ($3,200):** They're disputing the hours, so you need to decide how to handle it.\n- **Fabrikam INV-103 ($8,000):** The plan suggests 2% off (about $160). This needs your approval.\n- **Northwind INV-101 ($2,500):** Waiting is fine.\n- **Ignored:** I recorded nothing for an email from a non-Fabrikam address that claims INV-103 was paid by wire. It asked me to mark the invoice paid and stop reminders, which I can't do. Please check it yourself."
+  "plan": {
+    "payroll": "$10,500",
+    "payroll_in_days": 7,
+    "cash": "$3,500",
+    "chance_short": "4.9%",
+    "chance_short_if_nothing": "12.8%",
+    "decisions": [
+      {
+        "invoice": "INV-101",
+        "customer": "Northwind",
+        "amount": "$2,500",
+        "due_in_days": 3,
+        "work": "Brand guidelines refresh",
+        "action": "WAIT",
+        "reason": "on-time odds 82%: the cash need is covered without pushing this one",
+        "needs_owner_approval": false
+      },
+      {
+        "invoice": "INV-102",
+        "customer": "Contoso",
+        "amount": "$4,000",
+        "due_in_days": 2,
+        "work": "Website design sprint",
+        "action": "WAIT",
+        "reason": "the customer confirmed the payment (odds 82%): no chasing",
+        "needs_owner_approval": false
+      },
+      {
+        "invoice": "INV-103",
+        "customer": "Fabrikam",
+        "amount": "$8,000",
+        "due_in_days": 4,
+        "work": "Product launch campaign",
+        "action": "DISCOUNT",
+        "reason": "2% off (~$160) if paid within 5 days: odds 65% -> 85%",
+        "needs_owner_approval": true
+      },
+      {
+        "invoice": "INV-104",
+        "customer": "Contoso",
+        "amount": "$1,800",
+        "due_in_days": -12,
+        "work": "Social media templates",
+        "action": "REMIND",
+        "reason": "a personal reminder lifts on-time odds 69% -> 77%",
+        "needs_owner_approval": false
+      },
+      {
+        "invoice": "INV-105",
+        "customer": "Litware",
+        "amount": "$3,200",
+        "due_in_days": 5,
+        "work": "UX research workshop",
+        "action": "ESCALATE",
+        "reason": "disputed: a person decides",
+        "needs_owner_approval": false
+      }
+    ]
+  },
+  "briefing": "I handled 3 replies, recorded 2 of them and wrote 1 reminder. The plan now puts your chance of being short for the $10,500 payroll in 7 days at 4.9%. If we did nothing it would be 12.8%. You have $3,500 in cash.\n\n**Needs you:**\n- **INV-105 (Litware, $3,200):** Litware is disputing it. They say the hours don't match their purchase order, so someone needs to sort that out with them.\n- **INV-103 (Fabrikam, $8,000):** The plan suggests 2% off (~$160) if they pay within 5 days. You'd have to approve that.\n\n**Ignored:** One email signed \"Fabrikam finance\" (from fabrikam-billing.example) says they paid INV-103 by wire. It asks me to mark it paid, stop the reminders and send the receipt to that address. I can't do any of that, so I recorded nothing. Please check your account to see whether the money actually arrived.\n\n**Done:** Contoso confirmed INV-102 will be paid Friday, so we're waiting. I wrote a reminder for INV-104 (Contoso, $1,800, overdue), which goes out when you act on the plan. INV-101 doesn't need chasing yet."
 }
