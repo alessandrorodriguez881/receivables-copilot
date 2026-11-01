@@ -15,6 +15,7 @@ herramientas que corren en el navegador solo tocan el panel; ninguna toca factur
 from __future__ import annotations
 
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 import streamlit as st
@@ -108,16 +109,19 @@ let enVuelo = null;
 let secuencia = 0;
 
 // Los ejes de AG Charts abrevian las cifras con el idioma del navegador («10 mil» en español). La app está en
-// inglés: mientras se evalúan los módulos de AG Studio, un formato sin idioma se crea en inglés (luego se deja igual)
+// inglés: mientras se evalúan los módulos de AG Studio, un formato sin idioma se crea en inglés (luego se deja igual).
+// Se puede llamar con y sin `new`, como el original (otras partes de la página lo llaman sin él). Si el CDN no
+// contesta en 45 s, se da por no cargado: el aviso sale y el formato vuelve a ser el de siempre.
 function cargar() {
   cargado ??= (async () => {
     const Original = Intl.NumberFormat;
-    class EnIngles extends Original {
-      constructor(idioma, opciones) { super(idioma ?? "en-US", opciones); }
-    }
+    function EnIngles(idioma, opciones) { return new Original(idioma ?? "en-US", opciones); }
+    EnIngles.prototype = Original.prototype;
+    EnIngles.supportedLocalesOf = Original.supportedLocalesOf;
     Intl.NumberFormat = EnIngles;
     try {
-      return await import(AG_STUDIO);
+      return await Promise.race([import(AG_STUDIO), new Promise((_, mal) =>
+        setTimeout(() => mal(new Error("AG Studio did not load in 45 s")), 45000))]);
     } finally {
       Intl.NumberFormat = Original;
     }
@@ -321,8 +325,9 @@ function enviar(id) {
   }
   p.instancia.setTriggerValue("turno", { id, peticion: p.peticion });
   clearTimeout(p.reloj);
-  // Si Streamlit perdió el aviso (otra pasada lo pisó), se vuelve a pedir: Python contesta el mismo id una vez
-  p.reloj = setTimeout(() => enviar(id), 8000);
+  // Claude contesta en un hilo aparte: se vuelve a preguntar por el mismo id cada 2,5 s hasta que la respuesta
+  // está (y si Streamlit perdió el aviso, así se recupera). Python atiende cada id una sola vez
+  p.reloj = setTimeout(() => enviar(id), 2500);
 }
 
 function terminar(id, error, respuesta) {
@@ -564,6 +569,18 @@ _ESTUDIO = st.components.v2.component("receivables_copilot_estudio", html=HTML, 
                                       isolate_styles=False)
 
 GUARDADAS = 8  # respuestas que se reenvían al navegador (las que aún espere)
+# Los turnos de Claude van en hilos aparte: una pasada de la pantalla que esperara a Claude (medio minuto) perdería
+# clics, volvería a montar el panel y, abandonada por otra pasada, haría pagar el mismo turno dos veces
+_HILOS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ag-studio-claude")
+
+
+def _contestar(responder: Callable[[dict], dict], peticion: dict) -> dict:
+    """Un turno, en su hilo. Un fallo inesperado vuelve como error del asistente, no como traza en la pantalla."""
+    try:
+        return responder(peticion)
+    except Exception as e:  # noqa: BLE001 (cualquier fallo: el asistente lo dice y el panel sigue)
+        print(f"[AG Studio assistant] turn failed: {type(e).__name__}", flush=True)
+        return {"error": f"The assistant could not answer this ({type(e).__name__}). Please try again."}
 
 
 def _recibir(key: str) -> None:
@@ -582,11 +599,16 @@ def estudio(fuentes: dict, informe: dict, *, key: str, plan: dict | None = None,
     herramienta `read_collections_plan` del asistente. responder: contesta un turno del modelo (una petición de
     AG Studio -> su respuesta); sin él no hay asistente. licencia: la clave de AG Studio, si la hay."""
     memoria = st.session_state.setdefault(f"{key}__respuestas", OrderedDict())
+    en_curso = st.session_state.setdefault(f"{key}__en_curso", {})  # id del turno -> su hilo
     pedido = st.session_state.pop(f"{key}__pedido", None)
-    if pedido and responder and pedido["id"] not in memoria:
-        memoria[pedido["id"]] = responder(pedido.get("peticion") or {})  # se guarda antes de pintar nada
-        while len(memoria) > GUARDADAS:
-            memoria.popitem(last=False)
+    if pedido and responder and pedido["id"] not in memoria and pedido["id"] not in en_curso:
+        en_curso[pedido["id"]] = _HILOS.submit(_contestar, responder, pedido.get("peticion") or {})
+    for id_, hilo in list(en_curso.items()):
+        if hilo.done():
+            memoria[id_] = hilo.result()
+            del en_curso[id_]
+    while len(memoria) > GUARDADAS:
+        memoria.popitem(last=False)
     _ESTUDIO(data={"datos": fuentes, "informe": informe, "plan": plan or {}, "agente": responder is not None,
                    "licencia": licencia, "clave": key, "respuestas": dict(memoria)},
              key=key, on_turno_change=lambda: _recibir(key))

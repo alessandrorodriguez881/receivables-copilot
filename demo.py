@@ -31,12 +31,16 @@ class Situacion:
     caja: float
     plan: CollectionsPlan
     cobrado_por: dict[str, float] | None = None  # INV-xxx -> USD cobrado de esa factura
+    falta_por: dict[str, float] | None = None    # INV-xxx -> USD que PayPal aún espera (ya con el descuento, si lo hay)
+
+
+def _falta(factura: dict) -> float:
+    total = float(factura.get("amount", {}).get("value", 0))
+    return round(float(factura.get("due_amount", {}).get("value", total)), 2)
 
 
 def _cobrado(factura: dict) -> float:
-    total = float(factura.get("amount", {}).get("value", 0))
-    falta = float(factura.get("due_amount", {}).get("value", total))
-    return round(total - falta, 2)
+    return round(float(factura.get("amount", {}).get("value", 0)) - _falta(factura), 2)
 
 
 def cobrado_en_paypal(rail: PayPalRail, ronda: str) -> dict[str, float]:
@@ -45,17 +49,17 @@ def cobrado_en_paypal(rail: PayPalRail, ronda: str) -> dict[str, float]:
 
 
 def situacion(rail: PayPalRail, ronda: str, senales: list) -> Situacion:
-    estados, por, cobradas = {}, {}, set()
+    estados, por, falta, cobradas = {}, {}, {}, set()
     for iid, pid in facturas_de(ronda).items():
         f = rail.get_invoice(pid)
-        estados[iid], por[iid] = f.get("status", "?"), _cobrado(f)
+        estados[iid], por[iid], falta[iid] = f.get("status", "?"), _cobrado(f), _falta(f)
         if estados[iid] in COBRADA:
             cobradas.add(iid)
     cobrado = sum(por.values())
     caja = CAJA_INICIAL + cobrado
     plan = plan_collections(facturas_abiertas(senales, cobradas), perfiles(senales), caja, NECESIDADES, POLICY,
                             risk_check=REVISION_RIESGO)
-    return Situacion(estados, round(cobrado, 2), round(caja, 2), plan, por)
+    return Situacion(estados, round(cobrado, 2), round(caja, 2), plan, por, falta)
 
 
 def evidencia(senales: list) -> tuple[str, ...]:

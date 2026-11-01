@@ -525,8 +525,13 @@ with reglas:
 
 
 def asistente_estudio():
-    """Quien contesta los turnos del asistente del panel (Claude, desde el servidor), o None sin clave de Claude."""
-    if not con_claude():
+    """Quien contesta los turnos del asistente del panel (Claude, desde el servidor), o None.
+
+    Solo con la clave de Claude en el `.env` de este equipo, o si se pide con RC_STUDIO_ASSISTANT=1: en una web
+    pública que lleve la clave en sus secretos (para el paso 2), el asistente no queda abierto a cualquier visitante
+    sin decidirlo."""
+    if not con_claude() or not (read_env(ENV).get("ANTHROPIC_API_KEY")
+                                or os.environ.get("RC_STUDIO_ASSISTANT") == "1"):
         return None
     if "asistente_estudio" not in st.session_state:
         from agente_ia import cliente

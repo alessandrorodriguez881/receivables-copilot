@@ -16,7 +16,9 @@ principio de conversación. El texto y las llamadas a herramientas sí van siemp
 from __future__ import annotations
 
 import json
+import threading
 import time
+from datetime import date
 from typing import Callable
 
 import anthropic
@@ -24,8 +26,9 @@ import anthropic
 from agente_ia import MODEL
 
 MAX_TOKENS = 16000
-LIMITE_TURNOS = 150          # turnos de Claude por sesión de la pantalla (un encargo normal usa 5-15)
-LIMITE_PETICION = 600_000    # caracteres: una petición de AG Studio pesa ~20-60 mil
+LIMITE_TURNOS = 60           # turnos de Claude por sesión de la pantalla (un encargo normal usa 5-15)
+LIMITE_DIA = 150             # turnos al día entre todas las sesiones de este servidor: recargar no da más
+LIMITE_PETICION = 300_000    # caracteres: una petición de AG Studio pesa ~20-60 mil
 BETAS = ["server-side-fallback-2026-07-01"]
 
 GUARDIA = """You work inside the dashboard of Receivables Copilot, built with AG Studio. You can only read and \
@@ -246,16 +249,38 @@ def turno(client, peticion: dict, log: Callable[[str], None] = _log) -> dict:
     return respuesta
 
 
-class Asistente:
-    """Contesta los turnos de una sesión de la pantalla, con un tope de turnos (cada uno cuesta dinero)."""
+_hoy = {"dia": None, "turnos": 0}
+_candado = threading.Lock()
 
-    def __init__(self, crear_cliente: Callable[[], object], limite: int = LIMITE_TURNOS):
+
+def cabe_hoy(limite: int = LIMITE_DIA, hoy: Callable[[], date] = date.today) -> bool:
+    """¿Queda tope de turnos hoy en este servidor? Cuenta el turno si cabe. Es del proceso, no de la sesión: abrir
+    pestañas o recargar la página no da más."""
+    with _candado:
+        if _hoy["dia"] != hoy():
+            _hoy.update(dia=hoy(), turnos=0)
+        if _hoy["turnos"] >= limite:
+            return False
+        _hoy["turnos"] += 1
+        return True
+
+
+class Asistente:
+    """Contesta los turnos de una sesión de la pantalla, con un tope de turnos por sesión y otro al día para todo el
+    servidor (cada turno cuesta dinero)."""
+
+    def __init__(self, crear_cliente: Callable[[], object], limite: int = LIMITE_TURNOS,
+                 cabe: Callable[[], bool] = cabe_hoy):
         self.crear_cliente, self.limite, self.usados, self._cliente = crear_cliente, limite, 0, None
+        self.cabe = cabe
 
     def __call__(self, peticion: dict) -> dict:
         self.usados += 1
         if self.usados > self.limite:
-            return {"error": f"This session has used its {self.limite} Claude turns. Reload the page to start again."}
+            return {"error": f"This session has used its {self.limite} Claude turns."}
+        if not self.cabe():
+            return {"error": "The assistant has used today's Claude budget on this server. It is back tomorrow; "
+                             "the rest of the dashboard works as usual."}
         if self._cliente is None:
             try:
                 self._cliente = self.crear_cliente()

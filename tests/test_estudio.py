@@ -210,3 +210,33 @@ def test_each_session_has_a_turn_cap_and_no_key_only_disables_the_assistant():
     def sin_clave():
         raise RuntimeError("no key")
     assert "not available" in ae.Asistente(sin_clave)(PETICION)["error"]
+
+
+def test_still_owed_follows_what_paypal_expects_after_a_discount(situacion):
+    rail, s = situacion
+    # PayPal, with the 2% discount on the invoice: the total and what is due both drop to 7,840
+    rail.invoices[IDS["INV-103"]].update(amount={"value": "7840.00"}, due_amount={"value": "7840.00"})
+    facturas = {f["id"]: f for f in fuente(ed.fuentes(s(), ETIQUETAS, set()), "invoices")["data"]}
+    assert facturas["INV-103"]["outstanding"] == 7_840 and facturas["INV-103"]["collected"] == 0
+    assert sum(f["outstanding"] for f in facturas.values()) == 19_340
+
+
+def test_the_daily_budget_is_for_the_whole_server_not_one_session(monkeypatch):
+    monkeypatch.setattr(ae, "_hoy", {"dia": None, "turnos": 0})
+    dia = [ae.date(2026, 11, 2)]
+    assert [ae.cabe_hoy(2, lambda: dia[0]) for _ in range(3)] == [True, True, False]
+    dia[0] = ae.date(2026, 11, 3)  # a new day starts again
+    assert ae.cabe_hoy(2, lambda: dia[0])
+
+    creados = []
+    sin_presupuesto = ae.Asistente(lambda: creados.append(1), cabe=lambda: False)
+    assert "today's Claude budget" in sin_presupuesto(PETICION)["error"] and not creados  # Claude is not called
+
+
+def test_an_unexpected_failure_in_a_turn_is_an_error_message_not_a_traceback():
+    import estudio_ag
+
+    def falla(peticion):
+        raise KeyError("callId")
+    assert "could not answer" in estudio_ag._contestar(falla, PETICION)["error"]
+    assert estudio_ag._contestar(lambda p: {"id": "ok"}, PETICION) == {"id": "ok"}

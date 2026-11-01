@@ -124,6 +124,8 @@ The **Dashboard (AG Studio)** tab is a report built with [AG Studio](https://www
 
 In our tests, "Show who still owes us money, biggest first" got the four balances right and pointed to the scoreboard, and "Add a donut chart of how much is still owed, split by the agent's call" added that chart. Each request took several Claude turns, under a minute. In demo mode (no Claude key) the assistant is not shown; everything else in the tab works.
 
+Limits, since every turn costs money: the assistant appears only with the Claude key in this machine's `.env` (or with `RC_STUDIO_ASSISTANT=1`), so a public deployment that keeps the key in its secrets for step 2 does not open it to every visitor by accident. Each session gets 60 turns and the whole server 150 a day, and one request is capped in size. Claude answers in a background thread, so the screen never waits for it and a turn asked for twice is paid once. Pressing a sidebar step while Claude is still answering redraws the dashboard in view mode, and that chat starts over.
+
 AG Studio is commercial software: without a license key it logs a license notice in the browser console and may show a watermark. Put a trial key in `.env` as `AG_STUDIO_LICENSE=...`. It loads from jsDelivr at a pinned version (about 1.7 MB the first time, only when the tab is opened); offline, the tab says so and the rest of the screen works.
 
 ## Traps it handles (each one is an automated test)
@@ -190,7 +192,8 @@ Full write-up, including earlier versions and what failed: `RESULTADOS_SIMULACIO
 ```bash
 pip install -r requirements.txt
 # .env (never committed): PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENVIRONMENT=SANDBOX, ANTHROPIC_API_KEY
-# optional: AG_STUDIO_LICENSE (an AG Studio license or trial key)
+# optional: AG_STUDIO_LICENSE (an AG Studio license or trial key);
+#           RC_STUDIO_ASSISTANT=1 to offer the dashboard's Claude assistant when the key is not in .env
 # without it, the app runs in demo mode (see "Try it in 2 minutes" above)
 # once, with keys: load the customers' payment history into your sandbox (52 paid invoices, no emails)
 python historial_paypal.py
@@ -206,7 +209,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 90 tests). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 93 tests). The engine lives in `motor_comun/`.
 
 ## Use of AI
 

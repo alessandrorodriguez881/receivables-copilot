@@ -38,15 +38,17 @@ def filas_facturas(s, etiquetas: Mapping[str, str], pendientes: set[str]) -> lis
     """Una fila por factura abierta de la demo. `etiquetas`: acción del motor -> texto de la pantalla.
     `pendientes`: las facturas cuya tarjeta espera el sí del dueño."""
     decision = {d.invoice_id: d for d in s.plan.decisions}
-    cobrado_por = s.cobrado_por or {}
+    cobrado_por, falta_por = s.cobrado_por or {}, s.falta_por or {}
     filas = []
     for iid, cliente, importe, vence, concepto in FACTURAS:
         estado, d = s.estados.get(iid), decision.get(iid)
         pagada = estado in PAGADA
         cobrado = round(cobrado_por.get(iid, 0.0), 2)
+        # lo que PayPal aún espera: con un descuento aplicado, menos que el importe de la factura
+        falta = falta_por.get(iid, importe - cobrado)
         filas.append({
             "id": iid, "customer": cliente, "work": concepto, "amount": float(importe), "collected": cobrado,
-            "outstanding": 0.0 if pagada else round(importe - cobrado, 2),
+            "outstanding": 0.0 if pagada else round(falta, 2),
             "due_in_days": vence, "days_overdue": max(0, -vence),
             "status": ESTADO.get(estado, estado.title()) if estado else "Not sent",
             "agent_call": etiquetas[d.action] if d else ("Paid: nothing to do" if pagada else "No call yet"),
