@@ -31,6 +31,8 @@ Press the sidebar buttons in order:
 | **Approve**, then **3** again | The 2% discount is added to Fabrikam's invoice |
 | **4 · Fabrikam pays** | $7,840 is paid on the invoice in PayPal. Nothing tells the agent: it reads PayPal (on every screen refresh and every 8 seconds), spots the payment and re-plans. Short-risk 4.9% → **0%**; the only change is that the overdue reminder is no longer needed |
 
+Then open the **Dashboard (AG Studio)** tab: the same numbers, live, with Fabrikam paid up and payroll 108% covered. Click a customer to filter the page.
+
 **Proof it ran on the real sandbox:** [`evidencia/recibo_r20261028-132115.md`](evidencia/recibo_r20261028-132115.md) lists every action of a real demo round with its PayPal invoice id, re-queried from PayPal (discount on the invoice, payment found, MARKED_AS_PAID).
 
 ## The demo
@@ -108,6 +110,22 @@ The **How it decides** tab adds a second grid: the payment history the forecast 
 
 AG Grid loads from jsDelivr at a pinned version. Without internet the grids say so; the invoice cards below them still show every decision, with its approval buttons.
 
+## The dashboard (AG Studio)
+
+The **Dashboard (AG Studio)** tab is a report built with [AG Studio](https://www.ag-grid.com/studio/) 3.0, AG Grid's embedded analytics, inside our own Streamlit component (`estudio_ag.py`). It opens ready-made, in view mode: the saved report lives in code (`estudio_datos.INFORME`). Its data is the same as the rest of the screen, read from PayPal on every refresh, so when a payment lands the dashboard updates in place.
+
+- **Who still owes what**, a custom widget: a friendly scoreboard, biggest balance first, with a bar of what each customer has already paid. Click a customer and the whole page filters to them.
+- **Payroll covered**, a second custom widget: cash available against payroll. When Fabrikam pays, it goes from 33% to 108%.
+- AG Studio's own widgets for the rest: totals, the agent's call on each invoice (a grid), on-time odds with the agent's call vs without it, days late and on-time history by customer, and the cash on a bad day until payroll. Click a bar to cross-filter the page.
+- Themed like the app (its teal, Inter, the same borders and corners), with amounts in US dollars whatever the browser's language.
+- **Edit dashboard** opens AG Studio's editor: drag, resize, add or change widgets. **Reset to the saved dashboard** brings the saved report back.
+
+**Ask Claude for a view.** With a Claude key, the editor shows AG Studio's AI assistant. It runs AG Studio's agent framework with its five built-in agents plus one of ours, the **Collections analyst**: it knows the business, reads the collections plan through a read-only tool (`read_collections_plan`) and hands the building to the built-in agents. Every model turn goes from the browser to the Python server through the Streamlit component, and the server asks Claude (`agente_estudio.py`), so the key never reaches the browser. Claude only returns text and tool calls; AG Studio runs them in the browser, and they only change the dashboard. No tool there can change an invoice, send a reminder or move money.
+
+In our tests, "Show who still owes us money, biggest first" got the four balances right and pointed to the scoreboard, and "Add a donut chart of how much is still owed, split by the agent's call" added that chart. Each request took several Claude turns, under a minute. In demo mode (no Claude key) the assistant is not shown; everything else in the tab works.
+
+AG Studio is commercial software: without a license key it logs a license notice in the browser console and may show a watermark. Put a trial key in `.env` as `AG_STUDIO_LICENSE=...`. It loads from jsDelivr at a pinned version (about 1.7 MB the first time, only when the tab is opened); offline, the tab says so and the rest of the screen works.
+
 ## Traps it handles (each one is an automated test)
 
 | Trap | What happens | Test |
@@ -172,6 +190,7 @@ Full write-up, including earlier versions and what failed: `RESULTADOS_SIMULACIO
 ```bash
 pip install -r requirements.txt
 # .env (never committed): PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENVIRONMENT=SANDBOX, ANTHROPIC_API_KEY
+# optional: AG_STUDIO_LICENSE (an AG Studio license or trial key)
 # without it, the app runs in demo mode (see "Try it in 2 minutes" above)
 # once, with keys: load the customers' payment history into your sandbox (52 paid invoices, no emails)
 python historial_paypal.py
@@ -187,11 +206,11 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 78 tests). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 90 tests). The engine lives in `motor_comun/`.
 
 ## Use of AI
 
-- **In the product:** Claude (`claude-opus-5-5`) reads replies, writes reminders and explains the plan, as described above. It never sees API keys and cannot move money or mark invoices paid.
+- **In the product:** Claude (`claude-opus-5-5`) reads replies, writes reminders and explains the plan, as described above, and builds dashboard views through AG Studio's agents. It never sees API keys and cannot move money or mark invoices paid.
 - **In development:** built with Claude Code as a coding assistant. The author designed the product, the decision rule and the evaluation, and reviewed and ran every step.
 
 ## Shared engine

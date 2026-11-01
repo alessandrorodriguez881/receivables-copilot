@@ -32,6 +32,10 @@ from historial_paypal import numerar
 from modo import SIMULADO, conectar
 from rail_paypal import PayPalError, PayPalRail, read_env
 from tabla_aggrid import tabla
+import agente_estudio
+from estudio_ag import estudio
+from estudio_datos import INFORME
+from estudio_datos import fuentes as fuentes_estudio
 from triage_core.approvals import ApprovalBook
 from triage_core.cash_simulation import cash_bands
 from triage_core.collections_decision import DISCOUNT, ESCALATE, PLAN, REMIND, WAIT
@@ -267,7 +271,8 @@ if st.session_state.cambios:
     avisos.success(md(f"Payment received{origen}. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
                       f"The agent only reopened what the new cash changes: {lineas}."), icon=":material/savings:")
 
-facturas, bandeja, actividad, reglas = st.tabs(["Invoices", "Inbox", "Activity in PayPal", "How it decides"])
+facturas, bandeja, actividad, reglas, tablero = st.tabs(["Invoices", "Inbox", "Activity in PayPal", "How it decides",
+                                                         "Dashboard (AG Studio)"])
 PAGADA = ("PAID", "MARKED_AS_PAID")
 COLUMNAS_TRABAJO = [
     {"field": "factura", "headerName": "Invoice", "pinned": "left", "flex": 0, "width": 95, "filter": False},
@@ -517,3 +522,24 @@ with reglas:
                         "corrects them; this studio has no track record yet, so it uses the assumptions above"]})
     st.markdown(f"**The payment history the forecast learns from** · {ORIGEN_HISTORIAL}")
     tabla(filas_historial(), COLUMNAS_HISTORIAL, key="historial", alto=360, buscador=True)
+
+
+def asistente_estudio():
+    """Quien contesta los turnos del asistente del panel (Claude, desde el servidor), o None sin clave de Claude."""
+    if not con_claude():
+        return None
+    if "asistente_estudio" not in st.session_state:
+        from agente_ia import cliente
+        st.session_state.asistente_estudio = agente_estudio.Asistente(lambda: cliente(ENV))
+    return st.session_state.asistente_estudio
+
+
+@st.fragment
+def panel_estudio(fuentes: dict, plan: dict) -> None:
+    """El panel de AG Studio. Es un fragmento: cada turno del asistente repinta solo esto, no la pantalla."""
+    estudio(fuentes, INFORME, key="estudio", plan=plan, responder=asistente_estudio(),
+            licencia=read_env(ENV).get("AG_STUDIO_LICENSE") or os.environ.get("AG_STUDIO_LICENSE", ""))
+
+
+with tablero:
+    panel_estudio(fuentes_estudio(s, {a: v[0] for a, v in ACCION.items()}, set(esperan)), plan_para_claude(s))
