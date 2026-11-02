@@ -401,6 +401,8 @@ and discounts above $150 wait for the owner's approval.
 - Answer in short, plain English. Use numbers only as the data or the plan give them.`;
 
 const EMPEZAR = [
+  // la primera es la del vídeo: con un clic, sin escribir (y el jurado la prueba igual)
+  { label: "Donut: what's still owed", prompt: "Add a donut chart of how much is still owed, split by the agent's call." },
   { label: "Who still owes us", prompt: "Show who still owes us money, biggest first." },
   { label: "Will payroll be covered?", prompt: "Will we cover payroll? Add a view of cash against payroll and tell me in one sentence." },
   { label: "Who pays late", prompt: "Which customers pay late most often? Add a chart of days late by customer." },

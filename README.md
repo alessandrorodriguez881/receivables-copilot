@@ -118,7 +118,7 @@ The **Dashboard (AG Studio)** tab is a report built with [AG Studio](https://www
 - **Payroll covered**, a second custom widget: cash available against payroll. When Fabrikam pays, it goes from 33% to 108%.
 - AG Studio's own widgets for the rest: totals, the agent's call on each invoice (a grid), on-time odds with the agent's call vs without it, days late and on-time history by customer, and the cash on a bad day until payroll. Click a bar to cross-filter the page.
 - Themed like the app (its teal, Inter, the same borders and corners), with amounts in US dollars whatever the browser's language.
-- **Edit dashboard** opens AG Studio's editor: drag, resize, add or change widgets. **Reset to the saved dashboard** brings the saved report back.
+- **Edit dashboard** (**Edit or ask Claude** when the assistant is on) opens AG Studio's editor: drag, resize, add or change widgets. **Reset to the saved dashboard** brings the saved report back.
 
 **Ask Claude for a view.** With a Claude key, the editor shows AG Studio's AI assistant. It runs AG Studio's agent framework with its five built-in agents plus one of ours, the **Collections analyst**: it knows the business, reads the collections plan through a read-only tool (`read_collections_plan`) and hands the building to the built-in agents. Every model turn goes from the browser to the Python server through the Streamlit component, and the server asks Claude (`agente_estudio.py`), so the key never reaches the browser. Claude only returns text and tool calls; AG Studio runs them in the browser, and they only change the dashboard. No tool there can change an invoice, send a reminder or move money.
 
