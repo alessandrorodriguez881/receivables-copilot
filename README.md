@@ -116,6 +116,8 @@ The **Dashboard (AG Studio)** tab is a report built with [AG Studio](https://www
 
 - **Who still owes what**, a custom widget: a friendly scoreboard, biggest balance first, with a bar of what each customer has already paid. Click a customer and the whole page filters to them.
 - **Payroll covered**, a second custom widget: cash available against payroll. When Fabrikam pays, it goes from 33% to 108%.
+- **Risk of missing payroll**, a third custom widget: the chance of being short on payday with the agent's plan, against doing nothing and the 5% the policy accepts (4.9% vs 12.8% once the replies are in; 0% after Fabrikam pays).
+- **Receivables Copilot vs fixed reminders**, a fourth custom widget: our 1,000-week evaluation inside the dashboard (weeks short on payday, reminders a week, weeks chasing a disputed invoice), averaged over the two fresh seeds in `RESULTADOS_SIMULACION.md`. It is a simulation, and the dashboard says so.
 - AG Studio's own widgets for the rest: totals, the agent's call on each invoice (a grid), on-time odds with the agent's call vs without it, days late and on-time history by customer, and the cash on a bad day until payroll. Click a bar to cross-filter the page.
 - Themed like the app (its teal, Inter, the same borders and corners), with amounts in US dollars whatever the browser's language.
 - **Edit dashboard** (**Edit or ask Claude** when the assistant is on) opens AG Studio's editor: drag, resize, add or change widgets. **Reset to the saved dashboard** brings the saved report back.
@@ -209,7 +211,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 93 tests). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 94 tests). The engine lives in `motor_comun/`.
 
 ## Use of AI
 

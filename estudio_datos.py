@@ -9,13 +9,20 @@ Tablas (los textos van en inglés, los ve el jurado):
 - `invoices`: las 5 facturas abiertas, lo cobrado, lo que falta, la decisión del agente y la probabilidad de
   cobrar a tiempo antes y después de actuar.
 - `history`: las facturas ya pagadas de cada cliente y sus días de retraso (lo que aprende el modelo).
-- `payroll`: una fila con la nómina, la caja y el riesgo de quedarse corto.
+- `payroll`: una fila con la nómina, la caja y el riesgo de quedarse corto (con el plan, sin hacer nada y el que
+  acepta la política).
 - `cash`: la caja prevista cada día hasta la nómina, con el plan y sin hacer nada (mediana y caso malo).
+- `evaluation`: nuestra medición de 1.000 semanas simuladas frente a los recordatorios fijos, en las dos semillas
+  nuevas de la sexta tanda (las mismas cifras que el vídeo y `RESULTADOS_SIMULACION.md`).
 """
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Mapping
 
+from demo import POLICY
 from escenario import CAJA_INICIAL, CLIENTES, FACTURAS, HISTORIAL_MODELO, NECESIDADES, POR_CLIENTE
 from historial_paypal import numerar
 from triage_core.cash_simulation import cash_bands
@@ -83,7 +90,35 @@ def fila_nomina(s) -> dict:
     return {"what": need.what.capitalize(), "payroll": float(need.amount), "payday_in_days": need.day,
             "bank_cash": CAJA_INICIAL, "collected": round(s.cobrado, 2), "cash": round(s.caja, 2),
             "gap": round(max(0.0, need.amount - s.caja), 2),
-            "chance_short": round(s.plan.p_short, 4), "chance_short_if_nothing": round(s.plan.p_short_if_wait, 4)}
+            "chance_short": round(s.plan.p_short, 4), "chance_short_if_nothing": round(s.plan.p_short_if_wait, 4),
+            "risk_limit": POLICY.max_short_prob}
+
+
+RESULTADOS = Path(__file__).parent / "resultados"
+SEMILLAS = (2040, 2041)  # la sexta tanda, con semillas nuevas: las cifras del vídeo y de RESULTADOS_SIMULACION.md
+ESTRATEGIAS = {"Receivables Copilot": "Receivables Copilot", "PayPal fixed reminders": "PayPal-style fixed reminders"}
+
+
+@lru_cache(maxsize=1)
+def _evaluacion() -> tuple[dict, ...]:
+    filas = []
+    for semilla in SEMILLAS:
+        agentes = json.loads((RESULTADOS / f"simulacion_1000_semilla{semilla}.json").read_text(encoding="utf-8"))
+        for clave, nombre in ESTRATEGIAS.items():
+            a = agentes["agentes"][clave]
+            filas.append({"id": f"{semilla}-{clave}", "seed": str(semilla), "strategy": nombre,
+                          "weeks_short": round(a["corto_pct"] / 100, 4),
+                          "reminders_per_week": round(a["recordatorios_por_semana"], 2),
+                          "weeks_chasing_disputed": int(a["semanas_presionando_disputa"])})
+    return tuple(filas)
+
+
+def filas_evaluacion() -> list[dict]:
+    """Copilot frente a los recordatorios fijos, por semilla (vacío si faltan los resultados: el panel sigue)."""
+    try:
+        return [dict(f) for f in _evaluacion()]
+    except (OSError, ValueError, KeyError):
+        return []
 
 
 def filas_caja(s) -> list[dict]:
@@ -162,7 +197,21 @@ def fuentes(s, etiquetas: Mapping[str, str], pendientes: set[str]) -> dict:
                         _campo("chance_short", "Chance of being short", "percentageFormat",
                                "With the agent's plan, over 5,000 simulated scenarios"),
                         _campo("chance_short_if_nothing", "Chance of being short if it does nothing",
-                               "percentageFormat")]},
+                               "percentageFormat"),
+                        _campo("risk_limit", "Risk the policy accepts", "percentageFormat",
+                               "The plan must keep the chance of being short under this")]},
+            {"id": "evaluation", "name": "1,000 simulated weeks",
+             "description": ("Our evaluation: 1,000 simulated weeks on each of two fresh seeds, the same weeks and "
+                             "the same luck for both strategies, with hypotheses written before running "
+                             "(RESULTADOS_SIMULACION.md). weeks_short is the share of weeks short of cash on "
+                             "payday. The Copilot is not cheaper than fixed reminders: about the same cost a week."),
+             "data": filas_evaluacion(),
+             "fields": [_campo("id", "Row", "textFormat", oculto=True),
+                        _campo("seed", "Seed", "textFormat"),
+                        _campo("strategy", "Strategy", "textFormat"),
+                        _campo("weeks_short", "Weeks short on payday", "percentageFormat"),
+                        _campo("reminders_per_week", "Reminders per week", "decimalFormat"),
+                        _campo("weeks_chasing_disputed", "Weeks chasing a disputed invoice", "integerFormat")]},
             {"id": "cash", "name": "Cash until payroll",
              "description": "Simulated cash each day until payroll: median and a bad case (1 in 20).",
              "data": filas_caja(s),
@@ -207,6 +256,8 @@ def _kpi(texto: str, valor: dict) -> dict:
 
 MARCADOR = "rc-who-owes"     # widget propio: quién debe qué, como un marcador amable
 NOMINA = "rc-payroll-meter"  # widget propio: cuánto de la nómina está cubierto
+RIESGO = "rc-payroll-risk"   # widget propio: el riesgo de no llegar a la nómina, con el plan y sin hacer nada
+FRENTE = "rc-vs-fixed"       # widget propio: 1.000 semanas simuladas frente a los recordatorios fijos
 
 INFORME = {
     "selectedPageId": "collections",
@@ -217,7 +268,13 @@ INFORME = {
         "widgets": {
             "kpi-owed": _kpi("Still owed to us", _suma("invoices.outstanding")),
             "kpi-collected": _kpi("Collected so far", _suma("invoices.collected")),
-            "kpi-short": _kpi("Risk of missing payroll", _suma("payroll.chance_short")),
+            "payroll-risk": {
+                "type": RIESGO,
+                "dataMapping": {"plan": [_suma("payroll.chance_short")],
+                                "nothing": [_suma("payroll.chance_short_if_nothing")],
+                                "limit": [_suma("payroll.risk_limit")]},
+                "format": _titulo("Risk of missing payroll", "Over 5,000 simulated scenarios"),
+            },
             "payroll-meter": {
                 "type": NOMINA,
                 "dataMapping": {"cash": [_suma("payroll.cash")], "target": [_suma("payroll.payroll")]},
@@ -271,11 +328,21 @@ INFORME = {
                                                                          "doing nothing"),
                            "style": {"theme": {"common": {"legend": {"enabled": True}}}}},
             },
+            "vs-fixed": {
+                "type": FRENTE,
+                "dataMapping": {"who": [{"id": "evaluation.strategy"}],
+                                "short": [_media("evaluation.weeks_short")],
+                                "reminders": [_media("evaluation.reminders_per_week")],
+                                "disputed": [_media("evaluation.weeks_chasing_disputed")]},
+                "format": _titulo("Receivables Copilot vs fixed reminders",
+                                  "1,000 simulated weeks on two fresh seeds, the same weeks and luck for both "
+                                  "(averages). Lower is better"),
+            },
         },
         "widgetLayout": {
             "kpi-owed": _sitio(0, 0, 5, 8),
             "kpi-collected": _sitio(5, 0, 5, 8),
-            "kpi-short": _sitio(10, 0, 6, 8),
+            "payroll-risk": _sitio(10, 0, 6, 8),
             "payroll-meter": _sitio(16, 0, 8, 8),
             "who-owes": _sitio(0, 8, 10, 20),
             "odds": _sitio(10, 8, 14, 20),
@@ -283,6 +350,7 @@ INFORME = {
             "days-late": _sitio(0, 47, 8, 16),
             "on-time": _sitio(8, 47, 8, 16),
             "cash": _sitio(16, 47, 8, 16),
+            "vs-fixed": _sitio(0, 63, 24, 12),
         },
     }],
 }

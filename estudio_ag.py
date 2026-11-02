@@ -20,10 +20,10 @@ from typing import Callable
 
 import streamlit as st
 
-from estudio_datos import MARCADOR, NOMINA
+from estudio_datos import FRENTE, MARCADOR, NOMINA, RIESGO
 
 AG_STUDIO = "https://cdn.jsdelivr.net/npm/ag-studio@3.0.0/+esm"
-ALTO = 1200  # px del lienzo: el informe inicial cabe entero, sin barra de desplazamiento dentro
+ALTO = 1440  # px del lienzo: el informe inicial cabe entero, sin barra de desplazamiento dentro
 
 HTML = """
 <div class="rcs-barra">
@@ -94,12 +94,44 @@ CSS = """
 .rcs-nomina-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #E4E4E7; }
 .rcs-nomina-lleno { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #EA580C; }
 .rcs-nomina-lleno.rcs-cubierta { background: #0F766E; }
+
+/* «Risk of missing payroll»: con el plan, sin hacer nada y el límite de la política */
+.rcs-riesgo { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 0.35rem;
+  font-family: Inter, sans-serif; color: #09090B; padding: 0 0.2rem; box-sizing: border-box; }
+.rcs-riesgo-cifra { display: flex; align-items: baseline; gap: 0.45rem; }
+.rcs-riesgo-pct { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #0F766E; }
+.rcs-riesgo-pct.rcs-pasa { color: #B15C00; }
+.rcs-riesgo-texto { font-size: 0.8rem; color: #71717A; }
+.rcs-riesgo-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #F4F4F5; }
+.rcs-riesgo-nada, .rcs-riesgo-plan { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
+.rcs-riesgo-nada { background: #D4D4D8; }
+.rcs-riesgo-plan { background: #0F766E; }
+.rcs-riesgo-plan.rcs-pasa { background: #EA580C; }
+.rcs-riesgo-tope { position: absolute; top: -0.2rem; bottom: -0.2rem; width: 2px; background: #09090B; }
+
+/* «Receivables Copilot vs fixed reminders»: las 1.000 semanas simuladas, una columna por medida */
+.rcs-frente { height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.4rem;
+  align-content: center; font-family: Inter, sans-serif; color: #09090B; padding: 0 0.3rem; box-sizing: border-box; }
+.rcs-frente-medida { min-width: 0; }
+.rcs-frente-titulo { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.45rem; }
+.rcs-frente-fila { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 0.6rem;
+  margin-bottom: 0.4rem; }
+.rcs-frente-quien { font-size: 0.76rem; color: #71717A; grid-column: 1 / -1; }
+.rcs-frente-pista { position: relative; height: 0.55rem; border-radius: 999px; background: #F4F4F5; }
+.rcs-frente-barra { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #A1A1AA; }
+.rcs-frente-fila.rcs-nuestro .rcs-frente-barra { background: #0F766E; }
+.rcs-frente-fila.rcs-nuestro .rcs-frente-quien { color: #09090B; font-weight: 500; }
+.rcs-frente-valor { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.95rem; min-width: 3.2rem;
+  text-align: right; }
+.rcs-frente-fila:not(.rcs-nuestro) .rcs-frente-valor { font-weight: 400; color: #52525B; }
 """
 
 JS = r"""
 const AG_STUDIO = "%AG_STUDIO%";
 const MARCADOR = "%MARCADOR%";
 const NOMINA = "%NOMINA%";
+const RIESGO = "%RIESGO%";
+const FRENTE = "%FRENTE%";
 let cargado = null;
 const estudios = new WeakMap();  // parentElement -> lo de esta instancia
 const memoria = new Map();       // clave -> último estado del informe (sobrevive a que Streamlit vuelva a montar)
@@ -262,8 +294,118 @@ class Nomina {
   }
 }
 
+// ---------- widget propio 3: el riesgo de no llegar a la nómina, con el plan, sin hacer nada y el límite ----------
+const pct1 = (v) => (Math.round(Number(v) * 1000) / 10).toFixed(1) + "%";
+
+class Riesgo {
+  constructor() {
+    this.raiz = document.createElement("div");
+    this.raiz.className = "rcs-riesgo";
+  }
+  getGui() { return this.raiz; }
+  init(p) { return this.refresh(p); }
+  async refresh(p) {
+    const { widgetApi, dataMapping } = p;
+    const plan = dataMapping.plan?.[0], nada = dataMapping.nothing?.[0], tope = dataMapping.limit?.[0];
+    if (!plan) { widgetApi.setDisplayState("incompleteDataMapping"); return; }
+    let r;
+    try {
+      r = await widgetApi.getData({ fields: [plan, ...(nada ? [nada] : []), ...(tope ? [tope] : [])] },
+        { crossFilter: "none" });
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+      throw e;
+    }
+    const f = r.results.rows[0];
+    if (!f) { widgetApi.setDisplayState("noData"); return; }
+    widgetApi.setDisplayState("displayed");
+    const conPlan = Number(valor(f, plan) ?? 0);
+    const sinNada = nada ? Number(valor(f, nada) ?? 0) : null, limite = tope ? Number(valor(f, tope) ?? 0) : null;
+    const pasa = limite != null && conPlan > limite + 1e-9;
+    const escala = Math.max(conPlan, sinNada ?? 0, (limite ?? 0) * 2, 0.01);
+    const ancho = (v) => Math.min(100, (100 * v) / escala).toFixed(1) + "%";
+    this.raiz.innerHTML = `<div class="rcs-riesgo-cifra"><span class="rcs-riesgo-pct"></span>
+      <span class="rcs-riesgo-texto">with the agent's plan</span></div><div class="rcs-riesgo-pista">
+      <div class="rcs-riesgo-nada"></div><div class="rcs-riesgo-plan"></div><div class="rcs-riesgo-tope"></div></div>
+      <div class="rcs-riesgo-texto rcs-riesgo-pie"></div>`;
+    const cifra = this.raiz.querySelector(".rcs-riesgo-pct");
+    cifra.textContent = pct1(conPlan);
+    cifra.classList.toggle("rcs-pasa", pasa);
+    const barra = this.raiz.querySelector(".rcs-riesgo-plan");
+    barra.style.width = ancho(conPlan);
+    barra.classList.toggle("rcs-pasa", pasa);
+    const gris = this.raiz.querySelector(".rcs-riesgo-nada");
+    gris.style.width = sinNada == null ? "0" : ancho(sinNada);
+    const marca = this.raiz.querySelector(".rcs-riesgo-tope");
+    marca.hidden = limite == null;
+    if (limite != null) { marca.style.left = ancho(limite); marca.title = "The risk the policy accepts"; }
+    this.raiz.querySelector(".rcs-riesgo-pie").textContent = [
+      sinNada == null ? "" : `${pct1(sinNada)} doing nothing`,
+      limite == null ? "" : `limit ${Math.round(limite * 100)}%`].filter(Boolean).join(" · ");
+  }
+}
+
+// ---------- widget propio 4: Copilot frente a los recordatorios fijos, en las 1.000 semanas simuladas ----------
+const MEDIDAS = [["short", "Weeks short on payday", (v) => pct1(v)],
+  ["reminders", "Reminders per week", (v) => Number(v).toFixed(2)],
+  ["disputed", "Weeks chasing a disputed invoice", (v) => Math.round(Number(v)).toLocaleString("en-US")]];
+
+class Frente {
+  constructor() {
+    this.raiz = document.createElement("div");
+    this.raiz.className = "rcs-frente";
+  }
+  getGui() { return this.raiz; }
+  init(p) { return this.refresh(p); }
+  async refresh(p) {
+    const { widgetApi, dataMapping } = p;
+    const quien = dataMapping.who?.[0];
+    const medidas = MEDIDAS.map(([k, titulo, fmt]) => ({ campo: dataMapping[k]?.[0], titulo, fmt }))
+      .filter((m) => m.campo);
+    if (!quien || !medidas.length) { widgetApi.setDisplayState("incompleteDataMapping"); return; }
+    let r;
+    try {
+      r = await widgetApi.getData({ fields: [quien, ...medidas.map((m) => m.campo)] }, { crossFilter: "none" });
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+      throw e;
+    }
+    const nuestro = (q) => /copilot/i.test(q);
+    const filas = r.results.rows.map((f) => ({ quien: String(valor(f, quien) ?? ""),
+      vals: medidas.map((m) => Number(valor(f, m.campo) ?? 0)) }))
+      .sort((a, b) => Number(nuestro(b.quien)) - Number(nuestro(a.quien)) || a.quien.localeCompare(b.quien));
+    this.raiz.replaceChildren();
+    if (!filas.length) { widgetApi.setDisplayState("noData"); return; }
+    widgetApi.setDisplayState("displayed");
+    medidas.forEach((m, i) => {
+      const caja = document.createElement("div");
+      caja.className = "rcs-frente-medida";
+      const titulo = document.createElement("div");
+      titulo.className = "rcs-frente-titulo";
+      titulo.textContent = m.titulo;
+      caja.append(titulo);
+      const tope = Math.max(...filas.map((f) => f.vals[i]), 1e-9);
+      filas.forEach((f) => {
+        const fila = document.createElement("div");
+        fila.className = "rcs-frente-fila" + (nuestro(f.quien) ? " rcs-nuestro" : "");
+        fila.innerHTML = `<span class="rcs-frente-quien"></span><div class="rcs-frente-pista">
+          <div class="rcs-frente-barra"></div></div><span class="rcs-frente-valor"></span>`;
+        fila.querySelector(".rcs-frente-quien").textContent = f.quien;
+        fila.querySelector(".rcs-frente-barra").style.width = Math.max(1, (100 * f.vals[i]) / tope).toFixed(1) + "%";
+        fila.querySelector(".rcs-frente-valor").textContent = m.fmt(f.vals[i]);
+        caja.append(fila);
+      });
+      this.raiz.append(caja);
+    });
+  }
+}
+
 const ICONO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
 <path d="M4 6h16M4 12h10M4 18h6"/></svg>`;
+const ICONO_RIESGO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>`;
+const ICONO_FRENTE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+<path d="M4 7h11M4 12h7M4 17h14"/></svg>`;
 const ICONO_NOMINA = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
 <rect x="3" y="9" width="18" height="6" rx="3"/><path d="M3 12h11"/></svg>`;
 
@@ -300,9 +442,48 @@ function widgetsPropios(ag) {
     ai: { label: "Payroll covered", description: "A meter of how much of the payroll the cash available covers, "
       + "with how much is still to come in or to spare.", usage: "Use it for cash against payroll." },
   };
+  const riesgo = {
+    id: RIESGO, label: "Risk of missing payroll", icon: ICONO_RIESGO, comp: Riesgo,
+    dataMapping: {
+      plan: { type: "field", supportedRoles: ["numeric"], required: true,
+        aiDescription: "Chance of being short on payday with the agent's plan (sum of payroll.chance_short)" },
+      nothing: { type: "field", supportedRoles: ["numeric"],
+        aiDescription: "The same chance if the agent does nothing (sum of payroll.chance_short_if_nothing)" },
+      limit: { type: "field", supportedRoles: ["numeric"],
+        aiDescription: "The risk the policy accepts (sum of payroll.risk_limit)" },
+    },
+    form: (p) => p.createDefaults({ dataMappingItems: [{ key: "plan", label: "With the plan" },
+      { key: "nothing", label: "Doing nothing" }, { key: "limit", label: "Policy limit" }] }),
+    defaultSize: { width: 6, height: 8 }, minSize: { width: 4, height: 6 },
+    ai: { label: "Risk of missing payroll", description: "The chance of being short of cash on payday with the "
+      + "agent's plan, against doing nothing and the limit the policy accepts.",
+      usage: "Use it for the payroll risk, or to show what the agent's plan changes." },
+  };
+  const frente = {
+    id: FRENTE, label: "Copilot vs fixed reminders", icon: ICONO_FRENTE, comp: Frente,
+    dataMapping: {
+      who: { type: "field", supportedRoles: ["category"], required: true,
+        aiDescription: "The strategy (evaluation.strategy)" },
+      short: { type: "field", supportedRoles: ["numeric"],
+        aiDescription: "Share of weeks short on payday (avg of evaluation.weeks_short)" },
+      reminders: { type: "field", supportedRoles: ["numeric"],
+        aiDescription: "Reminders sent per week (avg of evaluation.reminders_per_week)" },
+      disputed: { type: "field", supportedRoles: ["numeric"],
+        aiDescription: "Weeks chasing a disputed invoice (avg of evaluation.weeks_chasing_disputed)" },
+    },
+    form: (p) => p.createDefaults({ dataMappingItems: [{ key: "who", label: "Strategy" },
+      { key: "short", label: "Weeks short" }, { key: "reminders", label: "Reminders a week" },
+      { key: "disputed", label: "Chasing a dispute" }] }),
+    defaultSize: { width: 24, height: 12 }, minSize: { width: 12, height: 8 },
+    ai: { label: "Copilot vs fixed reminders", description: "Our measured evaluation: 1,000 simulated weeks of "
+      + "Receivables Copilot against PayPal-style fixed reminders, side by side for weeks short on payday, reminders "
+      + "a week and weeks chasing a disputed invoice. Lower is better on all three.",
+      usage: "Use it for how well the agent works, or how it compares with fixed reminders." },
+  };
   return (defaults) => ag.createWidgets({
-    additionalTypes: [marcador, nomina],
-    menu: [{ label: "Receivables Copilot", widgetIds: [MARCADOR, NOMINA] }, ...(defaults?.menu ?? [])],
+    additionalTypes: [marcador, nomina, riesgo, frente],
+    menu: [{ label: "Receivables Copilot", widgetIds: [MARCADOR, NOMINA, RIESGO, FRENTE] },
+      ...(defaults?.menu ?? [])],
   });
 }
 
@@ -394,7 +575,11 @@ after it acts), history (earlier paid invoices and their days late), payroll (on
 - read_collections_plan returns the collections agent's current plan, with the reason for each call. Use it \
 before explaining a call.
 - Prefer the app's own widgets when they fit: "${MARCADOR}" (who still owes what, a friendly scoreboard by \
-customer) and "${NOMINA}" (payroll covered). Keep the tone friendly, like a scoreboard, not a collections report.
+customer), "${NOMINA}" (payroll covered), "${RIESGO}" (risk of missing payroll with the plan, doing nothing and \
+the policy limit) and "${FRENTE}" (Receivables Copilot vs fixed reminders over 1,000 simulated weeks). Keep the \
+tone friendly, like a scoreboard, not a collections report.
+- The evaluation data is a simulation, not real customers: say so if you use it, and never say the agent is \
+cheaper than fixed reminders (it costs about the same a week).
 - You can only change this dashboard. You cannot send reminders, change invoices, give discounts or move money, \
 and no tool here does. If asked, say the owner does that in the Invoices tab, where each action follows the plan \
 and discounts above $150 wait for the owner's approval.
@@ -564,7 +749,8 @@ export default function (component) {
 }
 """
 
-JS = JS.replace("%AG_STUDIO%", AG_STUDIO).replace("%MARCADOR%", MARCADOR).replace("%NOMINA%", NOMINA)
+JS = (JS.replace("%AG_STUDIO%", AG_STUDIO).replace("%MARCADOR%", MARCADOR).replace("%NOMINA%", NOMINA)
+      .replace("%RIESGO%", RIESGO).replace("%FRENTE%", FRENTE))
 CSS = CSS.replace("%ALTO%", str(ALTO))
 
 _ESTUDIO = st.components.v2.component("receivables_copilot_estudio", html=HTML, css=CSS, js=JS,

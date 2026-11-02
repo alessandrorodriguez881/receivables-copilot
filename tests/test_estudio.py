@@ -76,9 +76,9 @@ def test_the_history_and_the_cash_tables(situacion):
     assert sorted(f["day"] for f in caja if f["scenario"] == "Doing nothing")[-1] == "Day 7 (payroll)"
 
 
-def test_the_saved_report_uses_both_custom_widgets():
+def test_the_saved_report_uses_all_four_custom_widgets():
     tipos = {w["type"] for w in ed.INFORME["pages"][0]["widgets"].values()}
-    assert {ed.MARCADOR, ed.NOMINA} <= tipos
+    assert {ed.MARCADOR, ed.NOMINA, ed.RIESGO, ed.FRENTE} <= tipos
     pagina = ed.INFORME["pages"][0]
     assert set(pagina["widgets"]) == set(pagina["widgetLayout"])
     for sitio in pagina["widgetLayout"].values():
@@ -240,3 +240,17 @@ def test_an_unexpected_failure_in_a_turn_is_an_error_message_not_a_traceback():
         raise KeyError("callId")
     assert "could not answer" in estudio_ag._contestar(falla, PETICION)["error"]
     assert estudio_ag._contestar(lambda p: {"id": "ok"}, PETICION) == {"id": "ok"}
+
+
+def test_the_evaluation_is_the_one_in_the_video_and_the_risk_has_its_limit(situacion):
+    _, s = situacion
+    fuentes = ed.fuentes(s(), ETIQUETAS, set())
+    filas = fuente(fuentes, "evaluation")["data"]
+    por = {(f["seed"], f["strategy"]): f for f in filas}
+    copilot, fijo = por[("2040", "Receivables Copilot")], por[("2040", "PayPal-style fixed reminders")]
+    assert copilot["weeks_short"] < fijo["weeks_short"] and copilot["reminders_per_week"] < fijo["reminders_per_week"]
+    assert copilot["weeks_chasing_disputed"] == 0 and fijo["weeks_chasing_disputed"] == 243  # as in RESULTADOS
+    assert len(filas) == 4
+    nomina = fuente(fuentes, "payroll")["data"][0]
+    assert nomina["risk_limit"] == demo.POLICY.max_short_prob
+    assert nomina["chance_short"] <= nomina["risk_limit"] < nomina["chance_short_if_nothing"]
