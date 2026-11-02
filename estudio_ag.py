@@ -91,7 +91,7 @@ CSS = """
 .rcs-nomina-pct.rcs-falta { color: #B15C00; }
 .rcs-nomina-pct.rcs-cubierta { color: #0F766E; }
 .rcs-nomina-texto { font-size: 0.8rem; color: #71717A; }
-.rcs-nomina-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #E4E4E7; }
+.rcs-nomina-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #E4E4E7; flex: none; }
 .rcs-nomina-lleno { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #EA580C; }
 .rcs-nomina-lleno.rcs-cubierta { background: #0F766E; }
 
@@ -102,7 +102,7 @@ CSS = """
 .rcs-riesgo-pct { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #0F766E; }
 .rcs-riesgo-pct.rcs-pasa { color: #B15C00; }
 .rcs-riesgo-texto { font-size: 0.8rem; color: #71717A; }
-.rcs-riesgo-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #F4F4F5; }
+.rcs-riesgo-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #F4F4F5; flex: none; }
 .rcs-riesgo-nada, .rcs-riesgo-plan { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
 .rcs-riesgo-nada { background: #D4D4D8; }
 .rcs-riesgo-plan { background: #0F766E; }
