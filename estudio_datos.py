@@ -12,8 +12,9 @@ Tablas (los textos van en inglés, los ve el jurado):
 - `payroll`: una fila con la nómina, la caja y el riesgo de quedarse corto (con el plan, sin hacer nada y el que
   acepta la política).
 - `cash`: la caja prevista cada día hasta la nómina, con el plan y sin hacer nada (mediana y caso malo).
-- `evaluation`: nuestra medición de 1.000 semanas simuladas frente a los recordatorios fijos, en las dos semillas
-  nuevas de la sexta tanda (las mismas cifras que el vídeo y `RESULTADOS_SIMULACION.md`).
+- `evaluation`: nuestra medición de 1.000 semanas simuladas frente a los recordatorios fijos: una fila por
+  estrategia, con la media de las dos semillas nuevas de la sexta tanda (`RESULTADOS_SIMULACION.md`; la gráfica del
+  vídeo enseña la semilla 2040 en grande y la 2041 al pie). Ya promediada: sumar o promediar da lo mismo.
 """
 from __future__ import annotations
 
@@ -95,26 +96,28 @@ def fila_nomina(s) -> dict:
 
 
 RESULTADOS = Path(__file__).parent / "resultados"
-SEMILLAS = (2040, 2041)  # la sexta tanda, con semillas nuevas: las cifras del vídeo y de RESULTADOS_SIMULACION.md
+SEMILLAS = (2040, 2041)  # la sexta tanda, con semillas nuevas (RESULTADOS_SIMULACION.md)
 ESTRATEGIAS = {"Receivables Copilot": "Receivables Copilot", "PayPal fixed reminders": "PayPal-style fixed reminders"}
 
 
 @lru_cache(maxsize=1)
 def _evaluacion() -> tuple[dict, ...]:
-    filas = []
-    for semilla in SEMILLAS:
-        agentes = json.loads((RESULTADOS / f"simulacion_1000_semilla{semilla}.json").read_text(encoding="utf-8"))
-        for clave, nombre in ESTRATEGIAS.items():
-            a = agentes["agentes"][clave]
-            filas.append({"id": f"{semilla}-{clave}", "seed": str(semilla), "strategy": nombre,
-                          "weeks_short": round(a["corto_pct"] / 100, 4),
-                          "reminders_per_week": round(a["recordatorios_por_semana"], 2),
-                          "weeks_chasing_disputed": int(a["semanas_presionando_disputa"])})
-    return tuple(filas)
+    """Una fila por estrategia, ya con la media de las semillas: así ninguna vista puede sumarlas por error."""
+    agentes = [json.loads((RESULTADOS / f"simulacion_1000_semilla{s}.json").read_text(encoding="utf-8"))["agentes"]
+               for s in SEMILLAS]
+
+    def media(clave: str, campo: str) -> float:
+        return sum(a[clave][campo] for a in agentes) / len(agentes)
+
+    return tuple({"id": clave, "strategy": nombre, "seeds": " and ".join(map(str, SEMILLAS)),
+                  "weeks_short": round(media(clave, "corto_pct") / 100, 4),
+                  "reminders_per_week": round(media(clave, "recordatorios_por_semana"), 2),
+                  "weeks_chasing_disputed": round(media(clave, "semanas_presionando_disputa"))}
+                 for clave, nombre in ESTRATEGIAS.items())
 
 
 def filas_evaluacion() -> list[dict]:
-    """Copilot frente a los recordatorios fijos, por semilla (vacío si faltan los resultados: el panel sigue)."""
+    """Copilot frente a los recordatorios fijos (vacío si faltan los resultados: el panel sigue)."""
     try:
         return [dict(f) for f in _evaluacion()]
     except (OSError, ValueError, KeyError):
@@ -201,14 +204,15 @@ def fuentes(s, etiquetas: Mapping[str, str], pendientes: set[str]) -> dict:
                         _campo("risk_limit", "Risk the policy accepts", "percentageFormat",
                                "The plan must keep the chance of being short under this")]},
             {"id": "evaluation", "name": "1,000 simulated weeks",
-             "description": ("Our evaluation: 1,000 simulated weeks on each of two fresh seeds, the same weeks and "
-                             "the same luck for both strategies, with hypotheses written before running "
-                             "(RESULTADOS_SIMULACION.md). weeks_short is the share of weeks short of cash on "
-                             "payday. The Copilot is not cheaper than fixed reminders: about the same cost a week."),
+             "description": ("Our evaluation, a simulation: 1,000 simulated weeks on each of two fresh seeds, the "
+                             "same weeks and the same luck for both strategies, with hypotheses written before "
+                             "running (RESULTADOS_SIMULACION.md). One row per strategy, already averaged over the "
+                             "two seeds. weeks_short is the share of weeks short of cash on payday. The Copilot is "
+                             "not cheaper than fixed reminders: about the same cost a week."),
              "data": filas_evaluacion(),
              "fields": [_campo("id", "Row", "textFormat", oculto=True),
-                        _campo("seed", "Seed", "textFormat"),
                         _campo("strategy", "Strategy", "textFormat"),
+                        _campo("seeds", "Simulation seeds", "textFormat"),
                         _campo("weeks_short", "Weeks short on payday", "percentageFormat"),
                         _campo("reminders_per_week", "Reminders per week", "decimalFormat"),
                         _campo("weeks_chasing_disputed", "Weeks chasing a disputed invoice", "integerFormat")]},

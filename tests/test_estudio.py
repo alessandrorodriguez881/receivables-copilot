@@ -246,11 +246,13 @@ def test_the_evaluation_is_the_one_in_the_video_and_the_risk_has_its_limit(situa
     _, s = situacion
     fuentes = ed.fuentes(s(), ETIQUETAS, set())
     filas = fuente(fuentes, "evaluation")["data"]
-    por = {(f["seed"], f["strategy"]): f for f in filas}
-    copilot, fijo = por[("2040", "Receivables Copilot")], por[("2040", "PayPal-style fixed reminders")]
-    assert copilot["weeks_short"] < fijo["weeks_short"] and copilot["reminders_per_week"] < fijo["reminders_per_week"]
-    assert copilot["weeks_chasing_disputed"] == 0 and fijo["weeks_chasing_disputed"] == 243  # as in RESULTADOS
-    assert len(filas) == 4
+    por = {f["strategy"]: f for f in filas}
+    copilot, fijo = por["Receivables Copilot"], por["PayPal-style fixed reminders"]
+    # one row per strategy, already averaged over seeds 2040 and 2041: summing it can't double anything
+    assert len(filas) == 2 and copilot["seeds"] == "2040 and 2041"
+    assert (copilot["weeks_short"], fijo["weeks_short"]) == (0.1955, 0.204)
+    assert (copilot["reminders_per_week"], fijo["reminders_per_week"]) == (1.29, 3.44)
+    assert (copilot["weeks_chasing_disputed"], fijo["weeks_chasing_disputed"]) == (0, 243)
     nomina = fuente(fuentes, "payroll")["data"][0]
     assert nomina["risk_limit"] == demo.POLICY.max_short_prob
     assert nomina["chance_short"] <= nomina["risk_limit"] < nomina["chance_short_if_nothing"]

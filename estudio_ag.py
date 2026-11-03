@@ -55,6 +55,9 @@ CSS = """
   color: #FFFFFF; }
 .rcs-principal:hover { color: #FFFFFF; filter: brightness(1.08); }
 .rcs-estudio { width: 100%; height: %ALTO%px; }
+/* Editando, el editor ocupa la pantalla: el chat del asistente y sus sugerencias se ven sin bajar, y el lienzo
+   baja por dentro (con el ratón encima del panel) */
+.rcs-estudio.rcs-editando { height: calc(100vh - 110px); min-height: 620px; }
 .rcs-aviso { font-family: var(--st-font, Inter, sans-serif); font-size: 0.875rem; opacity: 0.75; padding: 0.5rem 0; }
 
 /* «Who still owes what»: un marcador amable, no un informe de morosos */
@@ -84,24 +87,28 @@ CSS = """
 .rcs-vacio { color: #71717A; font-size: 0.875rem; padding: 0.5rem; }
 
 /* «Payroll covered»: la caja frente a la nómina */
-.rcs-nomina { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 0.35rem;
+.rcs-nomina { height: 100%; display: flex; flex-direction: column; justify-content: safe center; gap: 0.35rem;
+  overflow: hidden;
   font-family: Inter, sans-serif; color: #09090B; padding: 0 0.2rem; box-sizing: border-box; }
-.rcs-nomina-cifra { display: flex; align-items: baseline; gap: 0.45rem; }
+.rcs-nomina-cifra { display: flex; align-items: baseline; gap: 0.45rem; white-space: nowrap; min-width: 0; }
 .rcs-nomina-pct { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rcs-nomina-pct.rcs-falta { color: #B15C00; }
 .rcs-nomina-pct.rcs-cubierta { color: #0F766E; }
-.rcs-nomina-texto { font-size: 0.8rem; color: #71717A; }
+.rcs-nomina-texto { font-size: 0.8rem; color: #71717A; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; min-width: 0; }
 .rcs-nomina-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #E4E4E7; flex: none; }
 .rcs-nomina-lleno { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: #EA580C; }
 .rcs-nomina-lleno.rcs-cubierta { background: #0F766E; }
 
 /* «Risk of missing payroll»: con el plan, sin hacer nada y el límite de la política */
-.rcs-riesgo { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 0.35rem;
+.rcs-riesgo { height: 100%; display: flex; flex-direction: column; justify-content: safe center; gap: 0.35rem;
+  overflow: hidden;
   font-family: Inter, sans-serif; color: #09090B; padding: 0 0.2rem; box-sizing: border-box; }
-.rcs-riesgo-cifra { display: flex; align-items: baseline; gap: 0.45rem; }
+.rcs-riesgo-cifra { display: flex; align-items: baseline; gap: 0.45rem; white-space: nowrap; min-width: 0; }
 .rcs-riesgo-pct { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: #0F766E; }
 .rcs-riesgo-pct.rcs-pasa { color: #B15C00; }
-.rcs-riesgo-texto { font-size: 0.8rem; color: #71717A; }
+.rcs-riesgo-texto { font-size: 0.8rem; color: #71717A; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; min-width: 0; }
 .rcs-riesgo-pista { position: relative; height: 0.6rem; border-radius: 999px; background: #F4F4F5; flex: none; }
 .rcs-riesgo-nada, .rcs-riesgo-plan { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
 .rcs-riesgo-nada { background: #D4D4D8; }
@@ -124,6 +131,7 @@ CSS = """
 .rcs-frente-valor { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.95rem; min-width: 3.2rem;
   text-align: right; }
 .rcs-frente-fila:not(.rcs-nuestro) .rcs-frente-valor { font-weight: 400; color: #52525B; }
+.rcs-frente-nota { grid-column: 1 / -1; font-size: 0.74rem; color: #71717A; }
 """
 
 JS = r"""
@@ -397,6 +405,11 @@ class Frente {
       });
       this.raiz.append(caja);
     });
+    // Lo dice el propio widget, lleve o no título (el asistente puede añadirlo sin él): son semanas simuladas
+    const nota = document.createElement("div");
+    nota.className = "rcs-frente-nota";
+    nota.textContent = "Simulation: 1,000 weeks on each of two fresh seeds, the same weeks for both. Lower is better.";
+    this.raiz.append(nota);
   }
 }
 
@@ -571,7 +584,8 @@ design studio that bills its customers with PayPal invoices and must cover payro
 You answer the owner's questions about who owes what, cash against payroll and the collections agent's calls, \
 and you build or change dashboard widgets to show the answer.
 - Data: customers, invoices (open invoices: still owed, collected, the agent's call, on-time odds before and \
-after it acts), history (earlier paid invoices and their days late), payroll (one row), cash (cash until payroll).
+after it acts), history (earlier paid invoices and their days late), payroll (one row), cash (cash until payroll), \
+evaluation (our simulation: Receivables Copilot vs fixed reminders, one row per strategy, averaged over two seeds).
 - read_collections_plan returns the collections agent's current plan, with the reason for each call. Use it \
 before explaining a call.
 - Prefer the app's own widgets when they fit: "${MARCADOR}" (who still owes what, a friendly scoreboard by \
@@ -677,6 +691,8 @@ function crear(ag, estado) {
   editar.onclick = () => {
     const aEditar = estado.api.getProperty("mode") !== "edit";
     estado.api.setProperty("mode", aEditar ? "edit" : "view");
+    lienzo.classList.toggle("rcs-editando", aEditar);
+    if (aEditar) estado.raiz.scrollIntoView({ behavior: "smooth", block: "start" });
     // Los paneles del editor solo existen al editar: la primera vez se pliegan los que dice el informe
     if (aEditar && !estado.plegados && estado.data.informe.panels) {
       estado.plegados = true;
@@ -686,6 +702,9 @@ function crear(ag, estado) {
     nota(estado);
   };
   reiniciar.onclick = () => {
+    // un turno de Claude aún en marcha no debe tocar el informe recién restaurado
+    cola.length = 0;
+    for (const id of [...pendientes.keys()]) terminar(id, new Error("Stopped: the dashboard was reset."));
     memoria.delete(estado.clave);
     estado.api.setState(estado.data.informe);
   };
