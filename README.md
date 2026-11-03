@@ -177,6 +177,24 @@ Results on the latest fresh seeds (2040 and 2041):
 
 Full write-up, including earlier versions and what failed: `RESULTADOS_SIMULACION.md` (Spanish).
 
+## Evidence: checked on 4,995 real business invoices
+
+A simulation cannot show that the payment model works on real customers. So we ran the same model (the shared engine, unchanged) on public data: the Kaggle ["Payment Date Dataset"](https://www.kaggle.com/datasets/rajattomar132/payment-date-dataset) (CC0), 50,000 invoices from a US supplier to large retailers in 2019-2020. At the start of each month, the model only saw payments made before that day and predicted the invoices issued that month. The hypotheses were written before running (`motor_comun/evaluacion_real/HIPOTESIS.md`). This model also draws the cash bands on screen.
+
+On the 4,995 invoices from 2020 whose payment date is known:
+- **Its on-time odds were right to within 2.6 points on average** (10 equal groups; the worst was 7 points off).
+- **24% less error (Brier score) than one on-time rate for every customer.** For customers with 1-4 earlier invoices, as in the demo, it had 13% less error than each customer's own rate: pooling with the portfolio matters most when history is short.
+- **Its "latest day" held.** Payments arrived by the model's 90% day 91.8% of the time; it promised 93.2%.
+
+![On 4,995 real invoices, the model's on-time odds against what really happened](motor_comun/evaluacion_real/calibracion.png)
+
+**Honest misses:**
+- **One hypothesis failed as written.** The pre-registered test counted invoices still marked open as late. They are not unpaid: the dataset removed the payment date of everything issued from 27 Feb 2020 (all of March to May is "open"). Counted that way, the average gap was 5.4 points and the worst group 12.7, missing our bar of 5 and 10. We report both.
+- These are large retailers on mostly 15-day terms, one supplier and two test months, not small businesses like the demo's.
+- It does not test reminders or discounts, because the dataset has no data on them. That evidence still comes from the simulation only.
+
+Full write-up and code: `motor_comun/evaluacion_real/` (`RESULTADOS.md` in Spanish; `evaluar.py` reruns it, and the script has the CSV's link and checksum).
+
 ## What is real and what is simulated
 
 - **Real PayPal sandbox API calls (Invoicing v2):**
@@ -187,6 +205,7 @@ Full write-up, including earlier versions and what failed: `RESULTADOS_SIMULACIO
 - Every write carries a `PayPal-Request-Id`, so a retry never sends a second email or records a second payment.
 - **Read back from PayPal:** each customer's payment history (52 paid invoices, listed and read through Invoicing v2).
 - **Simulated:** the customer paying, which is recorded as an external payment on the invoice. Also synthetic: the studio, the replies, and the history itself. We loaded the history into the sandbox once as paid invoices (sent without emailing anyone, each payment recorded on its real date), and the agent reads it back the way it would read a real account.
+- **Real data, for the payment model:** it was also checked on 4,995 real business invoices from a public dataset (see the section above).
 - **Demo mode (no keys):** `simulador_paypal.py` plays the PayPal sandbox under the same wrapper, and Claude's step replays a recorded real run (recorded on the simulator, from the demo's starting invoices). Claude's briefing is shown as current only while the plan on screen is the one Claude saw; once it changes (say, a customer pays), the screen says the briefing is out of date and keeps it folded away. `RC_GRABAR=1` with a Claude key records a new run. The screen says so in a banner. It keeps its own ledger (`data_simulada/`), apart from the real sandbox's.
 
 ## Run it
