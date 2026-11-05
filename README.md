@@ -2,6 +2,8 @@
 
 **A collections agent for PayPal invoices that decides who to chase, how, and when to ask you first.** Built for the PayPal AI Hackathon.
 
+**Demo video (2:59):** https://youtu.be/CGlhuuBnylY
+
 Freelancers and small studios get paid through PayPal invoices, and payroll does not wait for late customers. PayPal's automatic reminders treat every customer the same. Receivables Copilot looks at each open invoice, works out the chance that the money arrives before payday, and picks one action per invoice:
 - **wait**;
 - **send a reminder**;
