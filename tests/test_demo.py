@@ -105,3 +105,23 @@ def test_a_payment_is_recorded_once_and_the_plan_relaxes(setup):
     despues = demo.situacion(rail, "r1", SENALES_ENSAYO)
     assert len(rail.payments) == 1 and despues.cobrado == 8_000.0
     assert despues.plan.p_short < antes.plan.p_short
+
+
+def test_the_next_step_follows_the_order_of_the_demo(setup, monkeypatch):
+    rail, libro, book = setup
+
+    def toca(senales=SENALES_ENSAYO, pagada=False):
+        return demo.paso_siguiente(demo.situacion(rail, "r1", senales or []), libro, book, "r1", senales, pagada)
+
+    assert toca(senales=None) == "2"
+    assert toca() == "3"
+    run(rail, libro, book)  # the reminder goes out; the big discount waits for the owner
+    assert toca() == "aprobar"
+    book.approve(next(iter(book.pending)), "owner")
+    assert toca() == "3 aprobado"
+    run(rail, libro, book)
+    assert toca() == "4"
+    demo.cobro(rail, libro, "r1", "INV-103", log=lambda m: None)
+    assert toca(pagada=True) is None
+    monkeypatch.setattr(demo, "facturas_de", lambda ronda: {})
+    assert toca() == "1"

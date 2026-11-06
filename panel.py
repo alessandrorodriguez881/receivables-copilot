@@ -19,8 +19,8 @@ import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 import preparar_facturas
-from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, situacion,
-                  tarjeta_descuento,
+from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, paso_siguiente,
+                  situacion, tarjeta_descuento,
                   tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
                        HISTORIAL_MODELO, POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales,
@@ -176,26 +176,66 @@ def decidir(fp: str, si: bool) -> None:
         (book.approve if si else book.reject)(fp, "owner")
 
 
-pulsado = None
+def tarjeta_de(iid: str, d):
+    """La tarjeta que aprueba el dueño para esta decisión (descuento o plan por encima del límite), o None."""
+    if d is not None and d.action in (DISCOUNT, PLAN) and d.needs_approval:
+        return (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
+    return None
+
+
+PASOS = {"1": ("Creating and sending the invoices in PayPal", reiniciar), "2": ("Reading customer replies", leer),
+         "3": ("Acting on the plan in PayPal", actuar), "4": ("Fabrikam pays its invoice", paga_fabrikam)}
+
+
+def pulsar(paso: str) -> None:
+    st.session_state.pulsado = paso
+
+
+pulsado = st.session_state.pop("pulsado", None)  # el paso de la barra que se acaba de pulsar (lo apunta su botón)
 lista = len(facturas_de(ronda)) == len(FACTURAS)  # la ronda tiene sus 5 facturas en PayPal (paso 1 terminado)
 pagada = any(e.status == "COMPLETED" for e in libro.attempts(f"payment:{ronda}:INV-103"))
+lee = "2 · Read customer replies" + ("" if con_claude() else " (replay of a real Claude run)" if GRABACION.exists()
+                                     else " (rehearsal)")
+if pulsado:  # esta pasada solo hace ese paso y vuelve a empezar: la barra se queda como estaba, sin leer PayPal
+    toca = st.session_state.get("toca")
+else:  # el botón en color es el del paso que toca
+    s = situacion(rail, ronda, senales or [])
+    decision = {d.invoice_id: d for d in s.plan.decisions}
+    esperan = [iid for iid, d in decision.items() if (req := tarjeta_de(iid, d)) and req.fingerprint in book.pending]
+    toca = st.session_state.toca = paso_siguiente(s, libro, book, ronda, senales, pagada)
+
+
+def resaltar(*pasos) -> str:
+    return "primary" if toca in pasos else "secondary"
+
+
+def siguiente() -> str:
+    if toca == "aprobar" and len(esperan) == 1:
+        que = "discount" if decision[esperan[0]].action == DISCOUNT else "payment plan"
+        return (f"Next: approve or reject the {que} for {CONCEPTO[esperan[0]][0]}: click its row ({esperan[0]}) in "
+                "the worklist")
+    return {"1": "Press 1 first: this round does not have its 5 invoices in PayPal yet.", "2": f"Next: {lee}",
+            "3": "Next: 3 · Act on the plan",
+            "aprobar": "Next: approve or reject the cards waiting for you: click their rows in the worklist",
+            "3 aprobado": "Next: 3 · Act on the plan again, to apply what you approved",
+            "3 otra vez": "Next: 3 · Act on the plan again, to finish what is left",
+            "4": "Next: 4 · Fabrikam pays"}.get(toca, "Done. Step 1 starts a new round.")
+
+
 with st.sidebar:
     st.header("Run the demo")
     st.caption(f"{ESTUDIO} · round `{ronda}` · " + ("simulated PayPal sandbox, no keys" if SIMULADO
                                                     else "PayPal sandbox, no real money"))
-    if st.button("1 · New round: send 5 invoices", icon=":material/restart_alt:", width="stretch"):
-        pulsado = ("Creating and sending the invoices in PayPal", reiniciar)
-    if st.button("2 · Read customer replies" + ("" if con_claude() else " (replay of a real Claude run)"
-                                                if GRABACION.exists() else " (rehearsal)"), icon=":material/mail:",
-                 width="stretch", disabled=senales is not None or not lista):
-        pulsado = ("Reading customer replies", leer)
-    if st.button("3 · Act on the plan", icon=":material/play_arrow:", type="primary", width="stretch",
-                 disabled=not lista):
-        pulsado = ("Acting on the plan in PayPal", actuar)
-    if st.button("4 · Fabrikam pays", icon=":material/payments:", width="stretch", disabled=pagada or not lista):
-        pulsado = ("Fabrikam pays its invoice", paga_fabrikam)
-    st.caption("After approving the discount, press 3 again to apply it." if lista
-               else "Press 1 first: this round does not have its 5 invoices in PayPal yet.")
+    st.button("1 · New round: send 5 invoices", icon=":material/restart_alt:", type=resaltar("1", None),
+              width="stretch", on_click=pulsar, args=("1",))
+    st.button(lee, icon=":material/mail:", type=resaltar("2"), width="stretch",
+              disabled=senales is not None or not lista, on_click=pulsar, args=("2",))
+    st.button("3 · Act on the plan", icon=":material/play_arrow:", type=resaltar("3", "3 aprobado", "3 otra vez"),
+              width="stretch", disabled=not lista, on_click=pulsar, args=("3",))
+    st.button("4 · Fabrikam pays", icon=":material/payments:", type=resaltar("4"), width="stretch",
+              disabled=pagada or not lista, on_click=pulsar, args=("4",))
+    if not pulsado:
+        st.caption(siguiente())
     if lista:
         vigilar_cobros()
     with st.expander("Agent log", icon=":material/receipt_long:"):
@@ -218,7 +258,7 @@ if SIMULADO:
 # Streamlit no vuelve a montar las tablas en cada paso (si no, no se verían parpadear las celdas que cambian)
 arriba = st.container()
 if pulsado:
-    nombre, fn = pulsado
+    nombre, fn = PASOS[pulsado]
     st.session_state.error, mensajes = None, []
     with arriba, st.status(f":shimmer[{nombre}]", expanded=True) as progreso:
         def log(m: str) -> None:
@@ -235,15 +275,7 @@ if pulsado:
 if st.session_state.error:
     arriba.error(st.session_state.error, icon=":material/error:")
 
-s = situacion(rail, ronda, senales or [])
-decision = {d.invoice_id: d for d in s.plan.decisions}
 st.session_state.vistos, st.session_state.plan_visto = dict(s.cobrado_por or {}), s.plan  # lo que ya sabe el agente
-
-def tarjeta_de(iid: str, d):
-    """La tarjeta que aprueba el dueño para esta decisión (descuento o plan por encima del límite), o None."""
-    if d is not None and d.action in (DISCOUNT, PLAN) and d.needs_approval:
-        return (tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, iid, senales or [])
-    return None
 
 
 # ---------- cabecera: el día de las nóminas ----------
@@ -256,7 +288,6 @@ c3.metric("Chance of being short on payday", f"{s.plan.p_short:.1%}",
           round((s.plan.p_short - s.plan.p_short_if_wait) * 100, 1), delta_color="inverse",
           delta_description="pts vs doing nothing", border=True, height="stretch",
           help=f"Simulated over 5,000 scenarios of when each customer pays. The policy allows {POLICY.max_short_prob:.0%}.")
-esperan = [iid for iid, d in decision.items() if (req := tarjeta_de(iid, d)) and req.fingerprint in book.pending]
 c4.metric("Waiting for your approval", len(esperan), border=True, height="stretch",
           help=f"Discounts above {usd(POLICY.autonomous_discount_limit)} need you")
 

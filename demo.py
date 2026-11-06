@@ -222,6 +222,36 @@ def cobro(rail: PayPalRail, libro: Ledger, ronda: str, iid: str, log=print) -> f
     return debe
 
 
+PASO_3 = {REMIND: "remind", DISCOUNT: "discount", PLAN: "plan"}  # lo que hace el paso 3, con su clave en el libro
+
+
+def paso_siguiente(s: Situacion, libro: Ledger, book: ApprovalBook, ronda: str, senales: list | None,
+                   pagada: bool) -> str | None:
+    """El paso de la demo que toca ahora, para resaltar su botón: "1" a "4", "aprobar" (una tarjeta espera al dueño),
+    "3 aprobado" (el paso 3 aplica lo que aprobó), "3 otra vez" (al paso 3 aún le queda algo) o None (ya no queda nada).
+    No llama a PayPal: usa la situación ya leída, el libro y las aprobaciones."""
+    if len(facturas_de(ronda)) != len(FACTURAS):
+        return "1"
+    if senales is None:
+        return "2"
+    queda = aprobado = False
+    for d in s.plan.decisions:
+        clave = PASO_3.get(d.action)
+        if clave is None or any(e.status in SUCCESS for e in libro.attempts(f"{clave}:{ronda}:{d.invoice_id}")):
+            continue
+        req = ((tarjeta_descuento if d.action == DISCOUNT else tarjeta_plan)(ronda, d.invoice_id, senales)
+               if d.action in (DISCOUNT, PLAN) and d.needs_approval else None)
+        if req is not None and req.fingerprint in book.pending:
+            return "aprobar"
+        if req is None or req.fingerprint not in book.rejected:
+            queda, aprobado = True, aprobado or (req is not None and req.fingerprint in book.granted)
+    if queda:
+        hecho = any(e.status in SUCCESS and any(e.op_key.startswith(f"{c}:{ronda}:") for c in PASO_3.values())
+                    for e in libro.entries)
+        return "3 aprobado" if aprobado else "3 otra vez" if hecho else "3"
+    return None if pagada else "4"
+
+
 def cambios(antes: CollectionsPlan, despues: CollectionsPlan) -> list[tuple[str, str, str]]:
     previo = {d.invoice_id: d.action for d in antes.decisions}
     return [(d.invoice_id, previo[d.invoice_id], d.action) for d in despues.decisions
