@@ -95,6 +95,21 @@ def nota_recordatorio(iid: str, vencida: bool) -> tuple[str, str]:
     return asunto, nota
 
 
+def fecha_limite(dias: int) -> str:
+    return (date.today() + timedelta(days=dias)).strftime("%b %d")
+
+
+def nota_descuento() -> str:
+    """La nota que lleva la factura con el descuento (la misma que enseña la pantalla antes de aprobarlo)."""
+    return (f"Early-payment offer: {POLICY.discount_pct:.0%} off if paid by {fecha_limite(POLICY.discount_window_days)}. "
+            f"Thank you for working with {ESTUDIO}.")
+
+
+def nota_plan(ya: float) -> str:
+    return (f"Payment plan: {ya:,.2f} USD by {fecha_limite(POLICY.plan_first_days)}, the rest within "
+            f"{POLICY.plan_rest_days} days. Thank you for working with {ESTUDIO}.")
+
+
 def ejecutar(rail: PayPalRail, libro: Ledger, book: ApprovalBook, s: Situacion, ronda: str, senales: list,
              log=print, notas: dict | None = None) -> None:
     """Hace en PayPal lo que dice el plan. Cada acción va al libro con su PayPal-Request-Id: nunca dos veces.
@@ -153,9 +168,8 @@ def aplicar_plan(rail: PayPalRail, libro: Ledger, book: ApprovalBook, d, pid: st
     cuerpo = {k: v for k, v in factura.items() if k not in ("links", "status", "due_amount", "payments", "refunds")}
     cuerpo.setdefault("configuration", {})["partial_payment"] = {"allow_partial_payment": True,
                                                                  "minimum_amount_due": money(req.amount)}
-    hasta = (date.today() + timedelta(days=POLICY.plan_first_days)).strftime("%b %d")
-    cuerpo["detail"]["note"] = (f"Payment plan: {req.amount:,.2f} USD by {hasta}, the rest within "
-                                f"{POLICY.plan_rest_days} days. Thank you for working with {ESTUDIO}.")
+    hasta = fecha_limite(POLICY.plan_first_days)
+    cuerpo["detail"]["note"] = nota_plan(req.amount)
     try:
         rail.update(cuerpo, request_id=e.request_id)
     except PayPalError as err:
@@ -189,9 +203,8 @@ def aplicar_descuento(rail: PayPalRail, libro: Ledger, book: ApprovalBook, d, pi
     cuerpo = {k: v for k, v in factura.items() if k not in ("links", "status", "due_amount", "payments", "refunds")}
     cuerpo.setdefault("amount", {}).setdefault("breakdown", {})["discount"] = {
         "invoice_discount": {"percent": f"{POLICY.discount_pct * 100:g}"}}
-    hasta = (date.today() + timedelta(days=POLICY.discount_window_days)).strftime("%b %d")
-    cuerpo["detail"]["note"] = (f"Early-payment offer: {POLICY.discount_pct:.0%} off if paid by {hasta}. "
-                                f"Thank you for working with {ESTUDIO}.")
+    hasta = fecha_limite(POLICY.discount_window_days)
+    cuerpo["detail"]["note"] = nota_descuento()
     try:
         nueva = rail.update(cuerpo, request_id=e.request_id)
     except PayPalError as err:

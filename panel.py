@@ -19,8 +19,8 @@ import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 import preparar_facturas
-from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, paso_siguiente,
-                  situacion, tarjeta_descuento,
+from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, nota_descuento,
+                  nota_plan, paso_siguiente, situacion, tarjeta_descuento,
                   tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
                        HISTORIAL_MODELO, POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales,
@@ -327,6 +327,23 @@ COLUMNAS_HISTORIAL = [
 ]
 
 
+def que_va_a_paypal(iid: str, d) -> str:
+    """La llamada exacta que hará el paso 3 si el dueño aprueba (la de `aplicar_descuento` o `aplicar_plan`)."""
+    importe = CONCEPTO[iid][1]
+    if d.action == DISCOUNT:
+        cambios = (f"- `amount.breakdown.discount.invoice_discount.percent`: `{POLICY.discount_pct * 100:g}`, so the "
+                   f"customer owes {usd(importe * (1 - POLICY.discount_pct), 2)} instead of {usd(importe, 2)}\n"
+                   f"- `detail.note`: \"{nota_descuento()}\"")
+    else:
+        ya = round(POLICY.plan_first_pct * importe, 2)
+        cambios = (f"- `configuration.partial_payment`: partial payments allowed, {usd(ya, 2)} due now\n"
+                   f"- `detail.note`: \"{nota_plan(ya)}\"")
+    return md(f"`PUT /v2/invoicing/invoices/{facturas_de(ronda).get(iid, '…')}`: a full update (PayPal does not "
+              f"patch invoices), and PayPal emails the customer the new version.\n\n{cambios}\n\nIt carries a new "
+              "`PayPal-Request-Id`, written to the ledger before the call: if PayPal fails and the agent tries "
+              "again, the change is applied once.")
+
+
 def aprobacion(iid: str, d, prefijo: str = "") -> None:
     req = tarjeta_de(iid, d)
     if req is None:
@@ -344,11 +361,13 @@ def aprobacion(iid: str, d, prefijo: str = "") -> None:
                 if b.button(texto, key=f"{prefijo}{'ok' if si else 'no'}-{iid}", **extra):
                     decidir(req.fingerprint, si)
                     st.rerun()
-            return
-        b.button("Approve", key=f"ok-{iid}", type="primary", icon=":material/check:",
-                 on_click=decidir, args=(req.fingerprint, True))
-        b.button("Reject", key=f"no-{iid}", icon=":material/close:",
-                 on_click=decidir, args=(req.fingerprint, False))
+        else:
+            b.button("Approve", key=f"ok-{iid}", type="primary", icon=":material/check:",
+                     on_click=decidir, args=(req.fingerprint, True))
+            b.button("Reject", key=f"no-{iid}", icon=":material/close:",
+                     on_click=decidir, args=(req.fingerprint, False))
+        with st.expander("What goes to PayPal if you approve", icon=":material/code:"):
+            st.markdown(que_va_a_paypal(iid, d))
     elif req.fingerprint in book.granted:
         st.caption(":material/verified: Approved by the owner")
 
@@ -528,8 +547,11 @@ with actividad:
                   "payment": f"{iid} paid: {usd(e.amount, 2)}"}.get(tipo, e.op_key)
         with st.status(titulo, type="step", state="complete", expanded=True):
             st.caption(f"{e.counterparty} · {e.updated_at[:19].replace('T', ' ')} UTC · PayPal-Request-Id `{e.request_id[:8]}…`")
+            if iid in s.estados:
+                st.caption(md(f":material/sync: PayPal now says {s.estados[iid].replace('_', ' ').lower()}: "
+                              f"{usd((s.falta_por or {}).get(iid, 0.0), 2)} due of {usd(CONCEPTO[iid][1], 2)}"))
     st.caption("Every action carries a PayPal-Request-Id: repeating it never sends a second email or records a "
-               "second payment.")
+               "second payment. «PayPal now says» is read back from PayPal on every refresh, not from our ledger.")
 
 with reglas:
     st.markdown("For every open invoice the agent picks one action. Among all combinations it takes the cheapest "
