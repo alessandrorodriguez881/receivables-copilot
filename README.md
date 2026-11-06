@@ -4,6 +4,8 @@
 
 **Demo video (2:59):** https://youtu.be/CGlhuuBnylY
 
+**Live demo, no keys needed:** https://receivables-copilot-demo.streamlit.app (each visitor gets their own round; if nobody has opened it for a while, click "Yes, get this app back up!" and wait about 30 seconds)
+
 Freelancers and small studios get paid through PayPal invoices, and payroll does not wait for late customers. PayPal's automatic reminders treat every customer the same. Receivables Copilot looks at each open invoice, works out the chance that the money arrives before payday, and picks one action per invoice:
 - **wait**;
 - **send a reminder**;
@@ -15,6 +17,8 @@ It does all of it through the PayPal Invoicing API, with Claude reading customer
 ![The worklist after Claude read the replies: Litware's dispute goes to a person, Contoso's promise means no chasing, and a $160 discount for Fabrikam waits for the owner](docs/pantalla.jpg)
 
 ## Try it in 2 minutes, no keys needed
+
+Open the live demo above, or run it locally:
 
 ```bash
 pip install -r requirements.txt
