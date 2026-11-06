@@ -6,6 +6,14 @@
 
 **Live demo, no keys needed:** https://receivables-copilot-demo.streamlit.app (each visitor gets their own round; if nobody has opened it for a while, click "Yes, get this app back up!" and wait about 30 seconds)
 
+[![tests](https://github.com/alessandrorodriguez881/receivables-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/alessandrorodriguez881/receivables-copilot/actions/workflows/tests.yml)
+
+**In numbers** (details and honest misses below):
+- **Measured, not just demoed.** Over 1,000 simulated weeks against PayPal-style fixed reminders, it sent a third of the reminders (1.3 a week against 3.4) and never chased a customer who was disputing or had confirmed payment; the fixed schedule did in about a quarter and almost half of the weeks. It was short on payday less often on all eight fresh seeds, clearly on seven. It is not cheaper: the difference is within noise.
+- **Checked on 4,995 real business invoices:** its on-time odds were right to within 2.6 points on average.
+- **95 offline tests, run on every push,** including one for each trap in the table below.
+- **AG Grid and AG Studio:** the worklist is an AG Grid, and in the AG Studio dashboard our own widgets and AG Studio's charts cross-filter together, our Collections analyst agent hands the building to AG Studio's built-in agents, and everything updates in place when a payment lands in PayPal.
+
 Freelancers and small studios get paid through PayPal invoices, and payroll does not wait for late customers. PayPal's automatic reminders treat every customer the same. Receivables Copilot looks at each open invoice, works out the chance that the money arrives before payday, and picks one action per invoice:
 - **wait**;
 - **send a reminder**;
@@ -236,7 +244,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 94 tests). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 95 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
 
 ## Use of AI
 
