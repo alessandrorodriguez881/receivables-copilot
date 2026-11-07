@@ -76,7 +76,7 @@ If no combination is safe, it takes the cheapest one counting the risk, and says
 
 The screen draws those scenarios: cash for each day until payroll, the band that holds 90% of them with the plan and if the agent does nothing, against the $0 line. The plan mostly lifts the bad case; the median can be a little lower, because a discount gives away 2% of an invoice.
 
-Rules live in code (`triage_core/collections_decision.py`):
+Rules live in code (`motor_comun/triage_core/collections_decision.py`):
 - discounts above $150 need the owner;
 - reminders go out at most every 5 days, from 3 days before the due date;
 - a customer who confirmed a payment date is not chased;
@@ -85,7 +85,7 @@ Rules live in code (`triage_core/collections_decision.py`):
 
 Customers' on-time odds come from their payment history, which the agent **reads from PayPal**: the due date and the payment date of every earlier paid invoice (`historial_paypal.py`). The odds are shrunk towards the portfolio average by empirical Bayes.
 
-**It checks itself** (`triage_core/collections_calibration.py`). For every invoice it keeps what it believed, what it did and whether the customer then paid on time. From that record a small logistic regression corrects:
+**It checks itself** (`motor_comun/triage_core/collections_calibration.py`). For every invoice it keeps what it believed, what it did and whether the customer then paid on time. From that record a small logistic regression corrects:
 - its own forecast;
 - how much being overdue lowers the odds;
 - how much a reminder and a discount really lift them;
@@ -242,7 +242,7 @@ In the sidebar:
 4. Approve the discount, then **Act on the plan** again.
 5. **Fabrikam pays.**
 
-The same steps exist on the command line: `preparar_facturas.py`, `ejecutar_plan.py --correo`, `aprobar.py`, `ejecutar_plan.py --paga INV-103`.
+The same steps exist on the command line: `preparar_facturas.py`; `ejecutar_plan.py --correo`; `aprobar.py` to list the cards and `aprobar.py <code>` to approve one; `ejecutar_plan.py` to act on what you approved; then `ejecutar_plan.py --paga INV-103`.
 
 Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 95 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
 
@@ -253,7 +253,7 @@ Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app an
 
 ## Shared engine
 
-The forecasting, approval, ledger and signal-checking engine (`triage_core/`) is also used by Treasury Triage, a separate product built for the Airwallex hackathon. That product decides what to pay; this one decides how to collect. The product, the decision and the PayPal integration are specific to this project.
+The forecasting, approval, ledger and signal-checking engine (`motor_comun/triage_core/`) is also used by Treasury Triage, a separate product built for the Airwallex hackathon. That product decides what to pay; this one decides how to collect. The product, the decision and the PayPal integration are specific to this project.
 
 ## License
 

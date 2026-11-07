@@ -128,6 +128,9 @@ def leer(log) -> None:
 
 
 def actuar(log) -> None:
+    if senales is None:  # sin leer las respuestas, el plan podría presionar a quien disputa o ya confirmó
+        log("Read the customer replies first (step 2): the plan depends on them")
+        return
     ejecutar(rail, libro, book, situacion(rail, ronda, senales or []), ronda, senales or [], log,
              notas=notas_de(ronda))
 
@@ -231,7 +234,7 @@ with st.sidebar:
     st.button(lee, icon=":material/mail:", type=resaltar("2"), width="stretch",
               disabled=senales is not None or not lista, on_click=pulsar, args=("2",))
     st.button("3 · Act on the plan", icon=":material/play_arrow:", type=resaltar("3", "3 aprobado", "3 otra vez"),
-              width="stretch", disabled=not lista, on_click=pulsar, args=("3",))
+              width="stretch", disabled=not lista or senales is None, on_click=pulsar, args=("3",))
     st.button("4 · Fabrikam pays", icon=":material/payments:", type=resaltar("4"), width="stretch",
               disabled=pagada or not lista, on_click=pulsar, args=("4",))
     if not pulsado:

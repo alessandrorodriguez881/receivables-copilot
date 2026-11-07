@@ -56,6 +56,9 @@ class PayPalRail:
         env = read_env(path)
         if env.get("PAYPAL_ENVIRONMENT", "SANDBOX").upper() != "SANDBOX":
             raise RuntimeError("This project only runs against the PayPal SANDBOX")
+        if not (env.get("PAYPAL_CLIENT_ID") and env.get("PAYPAL_CLIENT_SECRET")):
+            raise RuntimeError(f"PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are missing in {path.name}: this step needs "
+                               "PayPal sandbox keys (the demo runs without them, against the simulated sandbox)")
         return cls(env["PAYPAL_CLIENT_ID"], env["PAYPAL_CLIENT_SECRET"], **kwargs)
 
     # ---------- plumbing ----------
