@@ -9,7 +9,7 @@
 [![tests](https://github.com/alessandrorodriguez881/receivables-copilot/actions/workflows/tests.yml/badge.svg)](https://github.com/alessandrorodriguez881/receivables-copilot/actions/workflows/tests.yml)
 
 **In numbers** (details and honest misses below):
-- **Measured, not just demoed.** Over 1,000 simulated weeks against PayPal-style fixed reminders, it sent a third of the reminders (1.3 a week against 3.4) and never chased a customer who was disputing or had confirmed payment; the fixed schedule did in about a quarter and almost half of the weeks. It was short on payday less often on all eight fresh seeds, clearly on seven. It is not cheaper: the difference is within noise.
+- **Measured, not just demoed.** Over 1,000 simulated weeks against PayPal-style fixed reminders, it sent a third of the reminders (1.3 a week against 3.4) and never chased a customer who was disputing or had confirmed payment; the fixed schedule did in about a quarter and almost half of the weeks. On the two latest fresh seeds it was short on payday less often (1.3 points fewer, clearly, and 0.4, within noise). It is not cheaper: the difference is within noise.
 - **Checked on 4,995 real business invoices:** its on-time odds were right to within 2.6 points on average.
 - **95 offline tests, run on every push,** including one for each trap in the table below.
 - **AG Grid and AG Studio:** the worklist is an AG Grid, and in the AG Studio dashboard our own widgets and AG Studio's charts cross-filter together, our Collections analyst agent hands the building to AG Studio's built-in agents, and everything updates in place when a payment lands in PayPal.
@@ -179,7 +179,7 @@ Results on the latest fresh seeds (2040 and 2041):
 - **A third of the reminders:** 1.3 a week against 3.4.
 - **It never chased a customer who disputed an invoice or had already confirmed payment.** The fixed schedule chased a disputing customer in about a quarter of the weeks, and one who had confirmed in almost half.
 - **It knows how much risk it runs:** its weekly forecast was within 1 point of what happened on both seeds (−0.5 and +0.7). Without learning, it expected 5-10 points less risk than it ran.
-- **Fewer weeks short on payday than fixed reminders:** 1.3 points fewer (clear) and 0.4 fewer (within noise). Across the eight fresh seeds we have run since the first version, it was short less often every time, clearly in seven.
+- **Fewer weeks short on payday than fixed reminders:** 1.3 points fewer (clear) and 0.4 fewer (within noise).
 
 **How much is there to gain?** We built an agent that knows the truth: each customer's real odds, the real effect of a reminder and a discount, and how replies relate to what customers do. With the same decision rule, it would save $8-$11 a week against fixed reminders on these seeds (within noise) and $23 on an earlier one. Most weeks short of cash cannot be saved by any reminder or discount.
 
