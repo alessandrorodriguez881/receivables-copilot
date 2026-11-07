@@ -48,7 +48,8 @@ def cobrado_en_paypal(rail: PayPalRail, ronda: str) -> dict[str, float]:
     return {iid: _cobrado(rail.get_invoice(pid)) for iid, pid in facturas_de(ronda).items()}
 
 
-def situacion(rail: PayPalRail, ronda: str, senales: list) -> Situacion:
+def situacion(rail: PayPalRail, ronda: str, senales: list, book: ApprovalBook | None = None) -> Situacion:
+    """Con las aprobaciones (book), el plan se hace sin lo que el dueño ya rechazó en esta ronda."""
     estados, por, falta, cobradas = {}, {}, {}, set()
     for iid, pid in facturas_de(ronda).items():
         f = rail.get_invoice(pid)
@@ -57,9 +58,19 @@ def situacion(rail: PayPalRail, ronda: str, senales: list) -> Situacion:
             cobradas.add(iid)
     cobrado = sum(por.values())
     caja = CAJA_INICIAL + cobrado
-    plan = plan_collections(facturas_abiertas(senales, cobradas), perfiles(senales), caja, NECESIDADES, POLICY,
-                            risk_check=REVISION_RIESGO)
+    plan = plan_collections(facturas_abiertas(senales, cobradas, rechazadas(book, ronda, senales)), perfiles(senales),
+                            caja, NECESIDADES, POLICY, risk_check=REVISION_RIESGO)
     return Situacion(estados, round(cobrado, 2), round(caja, 2), plan, por, falta)
+
+
+def rechazadas(book: ApprovalBook | None, ronda: str, senales: list) -> dict[str, frozenset[str]]:
+    """Lo que el dueño rechazó, factura a factura: la tarjeta de esta ronda, con estas pruebas. Su «no» vale para la
+    ronda: el plan sigue sin ello (y la cuenta del riesgo ya no lo cuenta)."""
+    if book is None or not book.rejected:
+        return {}
+    return {iid: no for iid, *_ in FACTURAS
+            if (no := frozenset(a for a, tarjeta in ((DISCOUNT, tarjeta_descuento), (PLAN, tarjeta_plan))
+                                if tarjeta(ronda, iid, senales).fingerprint in book.rejected))}
 
 
 def evidencia(senales: list) -> tuple[str, ...]:

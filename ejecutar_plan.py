@@ -38,7 +38,7 @@ def main() -> int:
     if args.correo and senales is None:
         try:
             from agente_ia import GRABAR, Bandeja, SinClave, cliente, guardar_grabacion, leer_bandeja, resumen
-            bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss)))
+            bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss, book)))
             explicacion = leer_bandeja(cliente(ENV), bandeja)
             if GRABAR:
                 guardar_grabacion(bandeja, explicacion, date.today())
@@ -54,10 +54,10 @@ def main() -> int:
         guardar_senales(ronda, senales)
     senales = senales or []
 
-    s = situacion(rail, ronda, senales)
+    s = situacion(rail, ronda, senales, book)
     if args.paga:
         cobro(rail, libro, ronda, args.paga)
-        antes, s = s, situacion(rail, ronda, senales)
+        antes, s = s, situacion(rail, ronda, senales, book)
         print("Re-planned with the new cash. What changed: "
               + ("; ".join(f"{i} {a} -> {b}" for i, a, b in cambios(antes.plan, s.plan)) or "nothing"))
     mostrar(s)

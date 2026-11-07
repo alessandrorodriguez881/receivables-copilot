@@ -170,11 +170,14 @@ def _afectadas(sig: Signal) -> set[str]:
     return nombradas or {i for i, c, *_ in FACTURAS if c == sig.customer}
 
 
-def facturas_abiertas(senales: list[Signal], cobradas: set[str] = frozenset()) -> list[Invoice]:
+def facturas_abiertas(senales: list[Signal], cobradas: set[str] = frozenset(),
+                      rechazadas: dict[str, frozenset[str]] | None = None) -> list[Invoice]:
     """Las facturas que siguen sin cobrar. Una disputa comprobada las pasa a una persona; una fecha confirmada,
-    a no presionar; una petición de más tiempo, a un plan de pagos (nunca un descuento)."""
+    a no presionar; una petición de más tiempo, a un plan de pagos (nunca un descuento). Lo que el dueño rechazó
+    (un descuento, un plan) sale de lo que el agente puede hacer con esa factura."""
     en_disputa = {i for s in senales if s.signal == "disputes_invoice" for i in _afectadas(s)}
     prometidas = {i for s in senales if s.signal == "confirms_payment" for i in _afectadas(s)}
     piden_tiempo = {i for s in senales if s.signal == "asks_for_more_time" for i in _afectadas(s)}
-    return [Invoice(i, c, a, d, disputed=i in en_disputa, promised=i in prometidas, asked_for_time=i in piden_tiempo)
+    return [Invoice(i, c, a, d, disputed=i in en_disputa, promised=i in prometidas, asked_for_time=i in piden_tiempo,
+                    ruled_out=(rechazadas or {}).get(i, frozenset()))
             for i, c, a, d, _ in FACTURAS if i not in cobradas]

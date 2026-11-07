@@ -11,7 +11,7 @@
 **In numbers** (details and honest misses below):
 - **Measured, not just demoed.** Over 1,000 simulated weeks against PayPal-style fixed reminders, it sent a third of the reminders (1.3 a week against 3.4) and never chased a customer who was disputing or had confirmed payment; the fixed schedule did in about a quarter and almost half of the weeks. On the two latest fresh seeds it was short on payday less often (1.3 points fewer, clearly, and 0.4, within noise). It is not cheaper: the difference is within noise.
 - **Checked on 4,995 real business invoices:** its on-time odds were right to within 2.6 points on average.
-- **95 offline tests, run on every push,** including one for each trap in the table below.
+- **97 offline tests, run on every push,** including one for each trap in the table below.
 - **AG Grid and AG Studio:** the worklist is an AG Grid, and in the AG Studio dashboard our own widgets and AG Studio's charts cross-filter together, our Collections analyst agent hands the building to AG Studio's built-in agents, and everything updates in place when a payment lands in PayPal.
 
 Freelancers and small studios get paid through PayPal invoices, and payroll does not wait for late customers. PayPal's automatic reminders treat every customer the same. Receivables Copilot looks at each open invoice, works out the chance that the money arrives before payday, and picks one action per invoice:
@@ -156,7 +156,7 @@ AG Studio is commercial software: without a license key it logs a license notice
 | Claude writes a reminder with a link, bank details or a discount | Rejected by code (anti-phishing) | `test_reminders_cannot_promise_discounts_links_or_other_payment_routes` |
 | Claude drafts a reminder the plan did not ask for | Rejected by code | `test_a_reminder_needs_the_plan_and_only_for_invoices_it_says_to_remind` |
 | A discount above the owner's limit | Waits for the owner, then goes out once | `test_the_big_discount_waits_for_the_owner_and_then_goes_out_once` |
-| The owner says no | Never offered in that round | `test_a_rejected_discount_is_never_offered` |
+| The owner says no | Never offered in that round: the agent re-plans without it, and the risk no longer counts on it | `test_a_rejected_discount_is_never_offered`, `test_after_the_owner_rejects_the_discount_the_agent_plans_without_it` |
 | The evidence changes after an approval | A new approval is needed | `test_new_evidence_needs_a_new_approval` |
 | PayPal fails while sending a reminder | Retried with the same `PayPal-Request-Id`: never two emails | `test_a_failed_reminder_is_retried_with_the_same_request_id` |
 | A payment is recorded twice | Recorded once; the plan relaxes | `test_a_payment_is_recorded_once_and_the_plan_relaxes` |
@@ -244,7 +244,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`; `ejecutar_plan.py --correo`; `aprobar.py` to list the cards and `aprobar.py <code>` to approve one; `ejecutar_plan.py` to act on what you approved; then `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 95 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 97 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
 
 ## Use of AI
 

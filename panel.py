@@ -110,7 +110,7 @@ def leer(log) -> None:
         return
     import anthropic
     from agente_ia import GRABAR, Bandeja, cliente, guardar_grabacion, leer_bandeja, repetir_grabacion, resumen
-    bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss)))
+    bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss, book)))
     if con_claude():
         try:
             st.session_state.resumen_ia = leer_bandeja(cliente(ENV), bandeja)
@@ -131,7 +131,7 @@ def actuar(log) -> None:
     if senales is None:  # sin leer las respuestas, el plan podría presionar a quien disputa o ya confirmó
         log("Read the customer replies first (step 2): the plan depends on them")
         return
-    ejecutar(rail, libro, book, situacion(rail, ronda, senales or []), ronda, senales or [], log,
+    ejecutar(rail, libro, book, situacion(rail, ronda, senales or [], book), ronda, senales or [], log,
              notas=notas_de(ronda))
 
 
@@ -155,7 +155,7 @@ def vigilar_cobros() -> None:
         ahora = cobrado_en_paypal(rail, ronda)
         nuevos = [] if vistos is None else [i for i, v in ahora.items() if v > vistos.get(i, 0.0) + 0.005]
         if nuevos and st.session_state.plan_visto is not None:
-            despues = situacion(rail, ronda, senales or []).plan
+            despues = situacion(rail, ronda, senales or [], book).plan
     except (PayPalError, requests.RequestException):  # sin red (o PayPal caído): la pantalla sigue, y se reintenta
         st.caption(":material/sensors_off: Could not reach PayPal; trying again in a few seconds")
         return
@@ -174,8 +174,11 @@ def vigilar_cobros() -> None:
                f"{datetime.now():%H:%M:%S}")
 
 
-def decidir(fp: str, si: bool) -> None:
+def decidir(fp: str, si: bool, iid: str) -> None:
     if fp in book.pending:  # con un doble clic, la tarjeta ya está decidida
+        if not si:  # el plan se rehace sin lo rechazado: la pantalla cuenta qué cambia
+            st.session_state.rechazo = (iid, "discount" if book.pending[fp].action == "early_payment_discount"
+                                        else "payment plan")
         (book.approve if si else book.reject)(fp, "owner")
 
 
@@ -202,10 +205,14 @@ lee = "2 · Read customer replies" + ("" if con_claude() else " (replay of a rea
 if pulsado:  # esta pasada solo hace ese paso y vuelve a empezar: la barra se queda como estaba, sin leer PayPal
     toca = st.session_state.get("toca")
 else:  # el botón en color es el del paso que toca
-    s = situacion(rail, ronda, senales or [])
+    s = situacion(rail, ronda, senales or [], book)
     decision = {d.invoice_id: d for d in s.plan.decisions}
     esperan = [iid for iid, d in decision.items() if (req := tarjeta_de(iid, d)) and req.fingerprint in book.pending]
     toca = st.session_state.toca = paso_siguiente(s, libro, book, ronda, senales, pagada)
+    if (rechazo := st.session_state.pop("rechazo", None)) and st.session_state.plan_visto is not None:
+        antes = st.session_state.plan_visto  # el plan que tenía delante el dueño al decir que no
+        st.session_state.cambios = {"lineas": cambios(antes, s.plan), "antes": antes.p_short,
+                                    "despues": s.plan.p_short, "rechazo": rechazo}
 
 
 def resaltar(*pasos) -> str:
@@ -300,10 +307,16 @@ for n in s.plan.notes:
 if st.session_state.cambios:
     c = st.session_state.cambios
     lineas = "; ".join(f"**{i}** {ACCION[a][0].lower()} → {ACCION[b][0].lower()}" for i, a, b in c["lineas"]) or "nothing"
-    origen = (f" in PayPal: {', '.join(c['detectado'])}. The agent spotted it on its own (it checks PayPal every "
-              f"{VIGILANCIA} s) and re-planned" if c.get("detectado") else "")
-    avisos.success(md(f"Payment received{origen}. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
-                      f"The agent only reopened what the new cash changes: {lineas}."), icon=":material/savings:")
+    if c.get("rechazo"):
+        iid, que = c["rechazo"]
+        avisos.info(md(f"You rejected the {que} for {iid} ({CONCEPTO[iid][0]}), so the agent re-planned without it. "
+                       f"Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. What changed: {lineas}."),
+                    icon=":material/alt_route:")
+    else:
+        origen = (f" in PayPal: {', '.join(c['detectado'])}. The agent spotted it on its own (it checks PayPal every "
+                  f"{VIGILANCIA} s) and re-planned" if c.get("detectado") else "")
+        avisos.success(md(f"Payment received{origen}. Chance of being short {c['antes']:.1%} → {c['despues']:.1%}. "
+                          f"The agent only reopened what the new cash changes: {lineas}."), icon=":material/savings:")
 
 facturas, bandeja, actividad, reglas, tablero = st.tabs(["Invoices", "Inbox", "Activity in PayPal", "How it decides",
                                                          "Dashboard (AG Studio)"])
@@ -362,13 +375,13 @@ def aprobacion(iid: str, d, prefijo: str = "") -> None:
             for si, texto, extra in ((True, "Approve", {"type": "primary", "icon": ":material/check:"}),
                                      (False, "Reject", {"icon": ":material/close:"})):
                 if b.button(texto, key=f"{prefijo}{'ok' if si else 'no'}-{iid}", **extra):
-                    decidir(req.fingerprint, si)
+                    decidir(req.fingerprint, si, iid)
                     st.rerun()
         else:
             b.button("Approve", key=f"ok-{iid}", type="primary", icon=":material/check:",
-                     on_click=decidir, args=(req.fingerprint, True))
+                     on_click=decidir, args=(req.fingerprint, True, iid))
             b.button("Reject", key=f"no-{iid}", icon=":material/close:",
-                     on_click=decidir, args=(req.fingerprint, False))
+                     on_click=decidir, args=(req.fingerprint, False, iid))
         with st.expander("What goes to PayPal if you approve", icon=":material/code:"):
             st.markdown(que_va_a_paypal(iid, d))
     elif req.fingerprint in book.granted:
@@ -506,8 +519,8 @@ with bandeja:
                 "domain and the quoted sentence is really in it. No tool can mark an invoice paid or stop reminders.")
     if st.session_state.resumen_ia:
         if st.session_state.plan_ia is not None and st.session_state.plan_ia != plan_para_claude(s):
-            st.info("Claude wrote its briefing before the latest changes (actions taken or payments received "
-                    "since), so its numbers are out of date. Everything else on this screen is current.",
+            st.info("Claude wrote its briefing before the latest changes (your decisions, actions taken or payments "
+                    "received since), so its numbers are out of date. Everything else on this screen is current.",
                     title="Claude's briefing for the owner", icon=":material/smart_toy:")
             with st.expander("The briefing as Claude wrote it (out of date)", icon=":material/history:"):
                 st.markdown(md(st.session_state.resumen_ia))

@@ -78,6 +78,22 @@ def test_a_rejected_discount_is_never_offered(setup):
     assert rail.updates == [] and any("rejected" in m for m in said)
 
 
+def test_after_the_owner_rejects_the_discount_the_agent_plans_without_it(setup):
+    """The risk no longer counts on a discount that will not go out, and step 3 has the new plan to carry out."""
+    rail, libro, book = setup
+    run(rail, libro, book)
+    antes = demo.situacion(rail, "r1", SENALES_ENSAYO, book)
+    book.reject(next(iter(book.pending)), "owner")
+    despues = demo.situacion(rail, "r1", SENALES_ENSAYO, book)
+    assert antes.plan.action_of("INV-103") == "DISCOUNT" and despues.plan.action_of("INV-103") == "WAIT"
+    assert despues.plan.p_short > antes.plan.p_short
+    assert demo.paso_siguiente(despues, libro, book, "r1", SENALES_ENSAYO, False) == "3 otra vez"
+    demo.ejecutar(rail, libro, book, despues, "r1", SENALES_ENSAYO, log=lambda m: None)
+    assert all(pid != "PP-INV-103" for pid, *_ in rail.updates)  # Fabrikam never gets the discount
+    final = demo.situacion(rail, "r1", SENALES_ENSAYO, book)
+    assert demo.paso_siguiente(final, libro, book, "r1", SENALES_ENSAYO, False) == "4"
+
+
 def test_new_evidence_needs_a_new_approval(setup):
     rail, libro, book = setup
     run(rail, libro, book)
