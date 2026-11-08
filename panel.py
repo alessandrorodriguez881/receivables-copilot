@@ -9,8 +9,10 @@ Uso (desde la carpeta app/):  python -m streamlit run panel.py
 import contextlib
 from datetime import date, datetime
 import io
+import json
 import os
 from pathlib import Path
+import re
 
 import altair as alt
 import pandas as pd
@@ -20,7 +22,7 @@ from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 import preparar_facturas
 from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, nota_descuento,
-                  nota_plan, paso_siguiente, situacion, tarjeta_descuento,
+                  nota_plan, paso_siguiente, plan_si_rechaza, situacion, tarjeta_descuento,
                   tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
                        HISTORIAL_MODELO, POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales,
@@ -52,12 +54,20 @@ ACCION = {  # etiqueta, color e icono de cada decisión
 }
 NEED = NECESIDADES[0]
 TEAL, GRIS, ROJO = "#0F766E", "#A1A1AA", "#DC2626"  # los de .streamlit/config.toml
+TOPE = POLICY.max_short_prob  # la probabilidad de quedarse corto que permite la política
+
+
+def riesgo(v: float) -> str:
+    """La probabilidad de quedarse corto, en rojo si pasa del límite de la política y en verde si no."""
+    return f":{'red' if v > TOPE else 'green'}[**{v:.1%}**]"
 
 
 def comprobar_auditoria() -> str:
-    """La orden que comprueba este mismo libro desde la consola (en el modo demo, cada visitante tiene su carpeta)."""
-    carpeta = Path(os.path.relpath(DATA, Path(__file__).parent)).as_posix() if SIMULADO else ""
-    return f"python verificar_auditoria.py {carpeta}".rstrip()
+    """Cómo comprobar el registro desde la consola. En la web pública, la carpeta de cada visitante está en el servidor:
+    lo que puede hacer el jurado es comprobar el suyo en una copia del repositorio."""
+    if SIMULADO:
+        return "Anyone can re-check the chain on their own run, in a clone of the repo: `python verify_audit.py`"
+    return "Check it yourself: `python verify_audit.py`"
 
 
 @st.cache_resource
@@ -71,6 +81,25 @@ def md(texto: str) -> str:
 
 def usd(v: float, dec: int = 0) -> str:
     return f"${v:,.{dec}f}"
+
+
+def plano(texto: str) -> str:
+    """Texto tal cual dentro de markdown: sin cursivas por un guion bajo ni enlaces por unos corchetes."""
+    return re.sub(r"([\\`*_\[\]<>#|~$])", r"\\\1", texto)
+
+
+def linea_agente(linea: str) -> str:
+    """Una línea del registro del agente, como una lista de pasos: la llamada en código y una marca de hecho, o de
+    rechazado si el código la paró (`read_inbox() -> 4 replies`, `record_signal(…) -> REJECTED by code: …`)."""
+    m = re.match(r"^(\w+\(.*?\)) -> (.*)$", linea)
+    if not m:
+        icono = (":orange[:material/approval:]" if "waits for approval" in linea else
+                 ":red[:material/front_hand:]" if "a person decides" in linea else
+                 ":red[:material/block:]" if "ignored" in linea.lower() else ":green[:material/check_circle:]")
+        return f"{icono} {plano(linea)}"
+    llamada, resultado = m.groups()
+    icono = ":red[:material/block:]" if "REJECTED" in resultado else ":green[:material/check_circle:]"
+    return f"{icono} `{llamada}` → {plano(resultado)}"
 
 
 def con_claude() -> bool:
@@ -222,8 +251,8 @@ def resaltar(*pasos) -> str:
 def siguiente() -> str:
     if toca == "aprobar" and len(esperan) == 1:
         que = "discount" if decision[esperan[0]].action == DISCOUNT else "payment plan"
-        return (f"Next: approve or reject the {que} for {CONCEPTO[esperan[0]][0]}: click its row ({esperan[0]}) in "
-                "the worklist")
+        return (f"Next: approve or reject the {que} for {CONCEPTO[esperan[0]][0]}: «Review it» at the top, or "
+                f"click its row ({esperan[0]}) in the worklist")
     return {"1": "Press 1 first: this round does not have its 5 invoices in PayPal yet.", "2": f"Next: {lee}",
             "3": "Next: 3 · Act on the plan",
             "aprobar": "Next: approve or reject the cards waiting for you: click their rows in the worklist",
@@ -259,24 +288,27 @@ st.title("Receivables Copilot")
 st.caption(f"{ESTUDIO} · a collections agent for PayPal invoices that decides who to chase, how, and when "
            "to ask you first")
 if SIMULADO:
-    st.info("No PayPal keys here, so a built-in simulator answers the same PayPal Invoicing API calls. With sandbox "
-            "keys in `.env`, the same buttons create, remind and update real invoices in the PayPal sandbox. "
-            "**Run the demo with steps 2 to 4 in the sidebar** (on a phone, open it with » at the top left).",
+    st.info("Demo mode: no keys here, so a built-in simulator answers the same PayPal Invoicing API calls as the "
+            "sandbox. Use the button below, or the steps in the sidebar (on a phone, open it with » at the top left).",
             icon=":material/science:")
 
+cabecera = st.container()  # lo que toca ahora y su botón: se rellena más abajo, cuando ya se sabe
 # Huecos fijos para lo que aparece y desaparece (progreso, errores, avisos): así lo de abajo no cambia de sitio y
 # Streamlit no vuelve a montar las tablas en cada paso (si no, no se verían parpadear las celdas que cambian)
 arriba = st.container()
 if pulsado:
     nombre, fn = PASOS[pulsado]
-    st.session_state.error, mensajes = None, []
+    st.session_state.error, st.session_state.hecho, mensajes = None, None, []
     with arriba, st.status(f":shimmer[{nombre}]", expanded=True) as progreso:
         def log(m: str) -> None:
             mensajes.append(m)
-            st.text(m)
+            st.markdown(linea_agente(m))
         try:
             fn(log)
             progreso.update(label=f"{nombre}: done", state="complete", expanded=False)
+            # lo que acaba de hacer el agente se queda a la vista hasta el paso siguiente
+            st.session_state.hecho = {"paso": pulsado, "nombre": nombre, "lineas": mensajes,
+                                      "antes": st.session_state.plan_visto}
         except (PayPalError, RuntimeError) as e:
             st.session_state.error = f"{nombre}: {e}"
             progreso.update(label=f"{nombre}: stopped", state="error")
@@ -284,8 +316,59 @@ if pulsado:
     st.rerun()
 if st.session_state.error:
     arriba.error(st.session_state.error, icon=":material/error:")
+elif hecho := st.session_state.get("hecho"):
+    with arriba.status(f"{hecho['nombre']}: done", state="complete", expanded=hecho["paso"] in ("2", "3")):
+        for m in hecho["lineas"]:
+            st.markdown(linea_agente(m))
+        if hecho["paso"] == "2":  # lo que el código no deja usar, aunque lo pida el correo
+            clientes = set(DOMINIOS.values())
+            for m in BANDEJA:
+                if m["from"].rsplit("@", 1)[-1] not in clientes:
+                    st.markdown(f":red[:material/block:] `{m['id']}` from {plano(m['from'])} → not used: not sent from "
+                                "a customer's domain, and no tool can mark an invoice paid")
+        a = hecho["antes"]
+        if a is not None and hecho["paso"] in ("2", "3") and (
+                (que := cambios(a, s.plan)) or round(a.p_short, 3) != round(s.plan.p_short, 3)
+                or round(a.p_short_if_wait, 3) != round(s.plan.p_short_if_wait, 3)):
+            que = "; ".join(f"**{i}** {ACCION[x][0].lower()} → {ACCION[y][0].lower()}" for i, x, y in que)
+            st.markdown(md(":material/alt_route: **Plan updated.** " + (f"What changed: {que}. " if que else "")
+                           + f"Chance of being short {a.p_short:.1%} → {s.plan.p_short:.1%} (if the agent did nothing: "
+                           f"{a.p_short_if_wait:.1%} → {s.plan.p_short_if_wait:.1%})."))
 
 st.session_state.vistos, st.session_state.plan_visto = dict(s.cobrado_por or {}), s.plan  # lo que ya sabe el agente
+
+
+# ---------- lo que toca ahora, con su botón ----------
+def abrir(iid: str) -> None:
+    st.session_state.abrir = iid  # el detalle se abre más abajo, donde está la tabla
+
+
+with cabecera:
+    texto, boton = st.columns([4, 1], vertical_alignment="center")
+    if esperan:
+        n = len(esperan)
+        texto.subheader(f"{n} decision{'s need' if n > 1 else ' needs'} you before {NEED.what}")
+        boton.button("Review it", icon=":material/approval:", type="primary", width="stretch", key="cta",
+                     on_click=abrir, args=(esperan[0],))
+    else:
+        titulo, cta = {
+            "1": ("Start a round: send this round's 5 invoices in PayPal", "1 · Send the invoices"),
+            "2": ("Customers have replied: the agent reads them before it acts", "2 · Read the replies"),
+            "3": ("The plan is ready: act on it in PayPal", "3 · Act on the plan"),
+            "3 aprobado": ("You approved it: now the agent applies it in PayPal", "3 · Act on the plan"),
+            "3 otra vez": ("Part of the plan is still to do", "3 · Act on the plan"),
+            "4": ("Done for now: the agent watches PayPal for payments", "4 · Fabrikam pays"),
+        }.get(toca, (f"{NEED.what.capitalize()} is covered: {usd(s.caja)} for {usd(NEED.amount)}"
+                     if s.caja >= NEED.amount else "Nothing left to do in this round", "1 · New round"))
+        texto.subheader(md(titulo))
+        boton.button(cta, type="primary" if toca else "secondary", width="stretch", key="cta", on_click=pulsar,
+                     args=(toca if toca in ("1", "2", "4") else "3" if toca else "1",))
+    if lista:
+        p, p0 = s.plan.p_short, s.plan.p_short_if_wait
+        texto.markdown(f"Chance of being short on {NEED.what}: " + (f"{riesgo(p0)} if the agent does nothing → "
+                                                                     if round(p0, 3) != round(p, 3) else "")
+                       + f"{riesgo(p)}" + (" with its plan" if round(p0, 3) != round(p, 3) else "")
+                       + f" · the policy allows {TOPE:.0%}")
 
 
 # ---------- cabecera: el día de las nóminas ----------
@@ -343,21 +426,41 @@ COLUMNAS_HISTORIAL = [
 ]
 
 
-def que_va_a_paypal(iid: str, d) -> str:
-    """La llamada exacta que hará el paso 3 si el dueño aprueba (la de `aplicar_descuento` o `aplicar_plan`)."""
+def que_va_a_paypal(iid: str, d) -> tuple[str, str]:
+    """La llamada exacta que hará el paso 3 si el dueño aprueba (la de `aplicar_descuento` o `aplicar_plan`): la
+    petición con los campos que cambian, y lo que significa."""
     importe = CONCEPTO[iid][1]
     if d.action == DISCOUNT:
-        cambios = (f"- `amount.breakdown.discount.invoice_discount.percent`: `{POLICY.discount_pct * 100:g}`, so the "
-                   f"customer owes {usd(importe * (1 - POLICY.discount_pct), 2)} instead of {usd(importe, 2)}\n"
-                   f"- `detail.note`: \"{nota_descuento()}\"")
+        campos = {"amount": {"breakdown": {"discount": {"invoice_discount": {
+            "percent": f"{POLICY.discount_pct * 100:g}"}}}}, "detail": {"note": nota_descuento()}}
+        efecto = f"The customer would owe {usd(importe * (1 - POLICY.discount_pct), 2)} instead of {usd(importe, 2)}."
     else:
         ya = round(POLICY.plan_first_pct * importe, 2)
-        cambios = (f"- `configuration.partial_payment`: partial payments allowed, {usd(ya, 2)} due now\n"
-                   f"- `detail.note`: \"{nota_plan(ya)}\"")
-    return md(f"`PUT /v2/invoicing/invoices/{facturas_de(ronda).get(iid, '…')}`: a full update (PayPal does not "
-              f"patch invoices), and PayPal emails the customer the new version.\n\n{cambios}\n\nIt carries a new "
-              "`PayPal-Request-Id`, written to the ledger before the call: if PayPal fails and the agent tries "
-              "again, the change is applied once.")
+        campos = {"configuration": {"partial_payment": {"allow_partial_payment": True, "minimum_amount_due": {
+            "currency_code": "USD", "value": f"{ya:.2f}"}}}, "detail": {"note": nota_plan(ya)}}
+        efecto = f"Partial payments allowed, with {usd(ya, 2)} due now."
+    peticion = (f"PUT /v2/invoicing/invoices/{facturas_de(ronda).get(iid, '…')}\n"
+                "PayPal-Request-Id: <a new id, written to the ledger before the call>\n"
+                "Content-Type: application/json\n\n{\n"
+                + ",\n".join(f'  "{k}": {json.dumps(v, ensure_ascii=False)}' for k, v in campos.items()) + "\n}")
+    return peticion, md(f"Only the fields that change are shown. PayPal does not patch invoices, so the agent sends the "
+                        f"whole invoice back with them, and PayPal emails the customer the new version. {efecto} If "
+                        "PayPal fails and the agent tries again with the same id, the change is applied once.")
+
+
+def opciones(iid: str, d, req) -> None:
+    """Lo que pasa con cada respuesta, antes de decidir: el plan con lo propuesto y el que saldría sin ello."""
+    sin = plan_si_rechaza(s, ronda, senales or [], book, iid, d.action)
+    si, no = st.columns(2)
+    with si.container(border=True, height="stretch"):
+        st.markdown(f"**If you approve** · chance of being short {riesgo(s.plan.p_short)}")
+        st.caption(md(f"Costs {usd(req.amount, 2)}" if d.action == DISCOUNT else
+                      f"{usd(req.amount, 2)} now, the rest {POLICY.plan_rest_days} days later")
+                   + (f" · on-time odds {d.p_before:.0%} → {d.p_after:.0%}" if d.p_after != d.p_before else ""))
+    with no.container(border=True, height="stretch"):
+        st.markdown(f"**If you reject** · chance of being short {riesgo(sin.p_short)}")
+        st.caption(f"{'Above' if sin.p_short > TOPE else 'Within'} the {TOPE:.0%} the policy allows · the agent "
+                   "re-plans without it")
 
 
 def aprobacion(iid: str, d, prefijo: str = "") -> None:
@@ -370,6 +473,8 @@ def aprobacion(iid: str, d, prefijo: str = "") -> None:
                    f"Changes the invoice's terms: {usd(req.amount, 2)} now, the rest "
                    f"{POLICY.plan_rest_days} days later."), title="Needs your approval",
                 icon=":material/approval:")
+        if prefijo:  # en el detalle se comparan las dos respuestas (en las tarjetas, solo los botones)
+            opciones(iid, d, req)
         b = st.container(horizontal=True)
         if prefijo:  # en el detalle (que se repinta solo): decidir y repintar toda la pantalla, que lo cierra
             for si, texto, extra in ((True, "Approve", {"type": "primary", "icon": ":material/check:"}),
@@ -383,7 +488,9 @@ def aprobacion(iid: str, d, prefijo: str = "") -> None:
             b.button("Reject", key=f"no-{iid}", icon=":material/close:",
                      on_click=decidir, args=(req.fingerprint, False, iid))
         with st.expander("What goes to PayPal if you approve", icon=":material/code:"):
-            st.markdown(que_va_a_paypal(iid, d))
+            peticion, explicacion = que_va_a_paypal(iid, d)
+            st.code(peticion, language="http", wrap_lines=True)
+            st.caption(explicacion)
     elif req.fingerprint in book.granted:
         st.caption(":material/verified: Approved by the owner")
 
@@ -471,48 +578,63 @@ with facturas:
     total = {"id": "total", "factura": "Total", "importe": sum(f[2] for f in FACTURAS),
              "cobrado": sum((s.cobrado_por or {}).values())}
     elegida = tabla(filas_trabajo(), COLUMNAS_TRABAJO, key="lista_facturas", total=total, clic=True)
-    if elegida:
-        detalle_factura(elegida)
-    ids = facturas_de(ronda)
-    cols = st.columns(3)
-    for n, (iid, cliente, importe, vence, concepto) in enumerate(FACTURAS):
-        with cols[n % 3].container(border=True, height="stretch"):
-            estado = s.estados.get(iid, "—")
-            cab = st.container(horizontal=True, vertical_alignment="center")
-            cab.markdown(f"**{iid}** · {cliente}")
-            if estado in ("PAID", "MARKED_AS_PAID"):
-                cab.badge("Paid", icon=":material/check_circle:", color="green")
-            else:
-                cab.badge(estado.title() if estado != "—" else "Not sent", color="gray")
-            st.caption(concepto)
-            cobrado = (s.cobrado_por or {}).get(iid, 0.0)
-            if estado in ("PAID", "MARKED_AS_PAID"):
-                st.markdown(md(f"### {usd(cobrado)}"))
-                st.caption(md(f"collected of {usd(importe)}"
-                              + (f" · {POLICY.discount_pct:.0%} early-payment discount" if cobrado < importe else "")))
-            else:
-                st.markdown(md(f"### {usd(importe)}"))
-                st.markdown(f":red[{-vence} days overdue]" if vence < 0 else f"Due in {vence} days")
-            d = decision.get(iid)
-            if d:
-                etiqueta, color, icono = ACCION[d.action]
-                st.badge(etiqueta, icon=icono, color=color)
-                st.progress(d.p_after, text=f"On-time odds {d.p_before:.0%}"
-                                            + (f" → {d.p_after:.0%}" if d.p_after != d.p_before else ""))
-                st.caption(md(d.reason))
-                pagadas, tarde = POR_CLIENTE[cliente]
-                st.caption(f":material/history: {cliente}'s history: {pagadas} paid invoices"
-                           + (" in PayPal" if "PayPal" in ORIGEN_HISTORIAL else "") + f", {tarde} of them late")
-                aprobacion(iid, d)
-            if iid in ids and not SIMULADO:
-                st.link_button("Open in PayPal", f"https://www.sandbox.paypal.com/invoice/p/#{ids[iid]}",
-                               icon=":material/open_in_new:", type="tertiary")
-    with cols[len(FACTURAS) % 3].container(border=True, height="stretch"):
+    pedida = st.session_state.pop("abrir", None)  # «Review it», el botón de arriba
+    if elegida or pedida:  # o una fila pulsada
+        detalle_factura(elegida or pedida)
+    izq, der = st.columns([2, 1])
+    with izq.container(border=True, height="stretch"):
         st.markdown(f"**Cash until {NEED.what}** · with the plan and if the agent does nothing")
         grafica_caja(s)
         st.caption(md(f"Each band holds 90% of 5,000 simulated scenarios of when customers pay. Below $0 on day "
                       f"{NEED.day} means short on {NEED.what}: {s.plan.p_short:.1%} with the plan, "
                       f"{s.plan.p_short_if_wait:.1%} if the agent does nothing."))
+    with der.container(border=True, height="stretch"):
+        st.markdown("**The plan, in short** · one call per invoice")
+        for accion in (REMIND, DISCOUNT, PLAN, ESCALATE, WAIT):
+            etiqueta, color, icono = ACCION[accion]
+            if quienes := [d.invoice_id for d in s.plan.decisions if d.action == accion]:
+                st.markdown(md(f":{color}-badge[{icono} {etiqueta}] {', '.join(quienes)}"))
+        if pagadas := [iid for iid, _, *_ in FACTURAS if s.estados.get(iid) in PAGADA]:
+            st.markdown(f":green-badge[:material/check_circle: Paid] {', '.join(pagadas)}")
+        st.caption(f"The cheapest mix of calls that keeps the chance of being short on {NEED.what} within "
+                   f"the {TOPE:.0%} the policy allows. Discounts above "
+                   + md(f"{usd(POLICY.autonomous_discount_limit)} wait for you."))
+    ids = facturas_de(ronda)
+    with st.expander("Invoice cards: each invoice and the agent's call, one card each",
+                     icon=":material/view_module:"):
+        cols = st.columns(3)
+        for n, (iid, cliente, importe, vence, concepto) in enumerate(FACTURAS):
+            with cols[n % 3].container(border=True, height="stretch"):
+                estado = s.estados.get(iid, "—")
+                cab = st.container(horizontal=True, vertical_alignment="center")
+                cab.markdown(f"**{iid}** · {cliente}")
+                if estado in ("PAID", "MARKED_AS_PAID"):
+                    cab.badge("Paid", icon=":material/check_circle:", color="green")
+                else:
+                    cab.badge(estado.title() if estado != "—" else "Not sent", color="gray")
+                st.caption(concepto)
+                cobrado = (s.cobrado_por or {}).get(iid, 0.0)
+                if estado in ("PAID", "MARKED_AS_PAID"):
+                    st.markdown(md(f"### {usd(cobrado)}"))
+                    st.caption(md(f"collected of {usd(importe)}"
+                                  + (f" · {POLICY.discount_pct:.0%} early-payment discount" if cobrado < importe else "")))
+                else:
+                    st.markdown(md(f"### {usd(importe)}"))
+                    st.markdown(f":red[{-vence} days overdue]" if vence < 0 else f"Due in {vence} days")
+                d = decision.get(iid)
+                if d:
+                    etiqueta, color, icono = ACCION[d.action]
+                    st.badge(etiqueta, icon=icono, color=color)
+                    st.progress(d.p_after, text=f"On-time odds {d.p_before:.0%}"
+                                                + (f" → {d.p_after:.0%}" if d.p_after != d.p_before else ""))
+                    st.caption(md(d.reason))
+                    pagadas, tarde = POR_CLIENTE[cliente]
+                    st.caption(f":material/history: {cliente}'s history: {pagadas} paid invoices"
+                               + (" in PayPal" if "PayPal" in ORIGEN_HISTORIAL else "") + f", {tarde} of them late")
+                    aprobacion(iid, d)
+                if iid in ids and not SIMULADO:
+                    st.link_button("Open in PayPal", f"https://www.sandbox.paypal.com/invoice/p/#{ids[iid]}",
+                                   icon=":material/open_in_new:", type="tertiary")
 
 with bandeja:
     st.markdown("Customer replies are untrusted data. A reply only counts if it comes from that customer's own "
@@ -550,7 +672,7 @@ with actividad:
         st.success(f"Audit trail verified: {chequeo.events} events, each chained to the one before by its hash, "
                    "and the ledger matches them"
                    + (f" ({chequeo.before_trail} older entries predate the trail)" if chequeo.before_trail else "")
-                   + f". Check it yourself: {comprobar_auditoria()}", icon=":material/verified_user:")
+                   + f". {comprobar_auditoria()}", icon=":material/verified_user:")
     else:
         st.error(f"Audit trail check failed: {chequeo.problem}", icon=":material/gpp_bad:")
     hechos = [e for e in libro.entries if f":{ronda}:" in e.op_key and e.status == "COMPLETED"]

@@ -73,6 +73,18 @@ def rechazadas(book: ApprovalBook | None, ronda: str, senales: list) -> dict[str
                                 if tarjeta(ronda, iid, senales).fingerprint in book.rejected))}
 
 
+def plan_si_rechaza(s: Situacion, ronda: str, senales: list, book: ApprovalBook | None, iid: str,
+                    accion: str) -> CollectionsPlan:
+    """El plan que saldría si el dueño dijera que no a esta acción (DISCOUNT o PLAN) de esta factura: la misma cuenta
+    que `situacion`, con lo que ya se leyó de PayPal en `s` (no vuelve a llamar a PayPal). La tarjeta lo enseña antes
+    de que el dueño decida."""
+    no = dict(rechazadas(book, ronda, senales))
+    no[iid] = no.get(iid, frozenset()) | {accion}
+    cobradas = {i for i, e in s.estados.items() if e in COBRADA}
+    return plan_collections(facturas_abiertas(senales, cobradas, no), perfiles(senales), s.caja, NECESIDADES, POLICY,
+                            risk_check=REVISION_RIESGO)
+
+
 def evidencia(senales: list) -> tuple[str, ...]:
     return tuple(s.evidence for s in senales)
 

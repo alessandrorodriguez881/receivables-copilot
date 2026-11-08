@@ -94,6 +94,20 @@ def test_after_the_owner_rejects_the_discount_the_agent_plans_without_it(setup):
     assert demo.paso_siguiente(final, libro, book, "r1", SENALES_ENSAYO, False) == "4"
 
 
+def test_the_card_shows_the_plan_the_agent_makes_if_the_owner_says_no(setup):
+    """«If you reject» on the approval card is the same plan as after a real rejection, without asking PayPal again."""
+    rail, libro, book = setup
+    run(rail, libro, book)
+    antes = demo.situacion(rail, "r1", SENALES_ENSAYO, book)
+    leidas = len(rail.reminders), dict(rail.invoices)
+    previsto = demo.plan_si_rechaza(antes, "r1", SENALES_ENSAYO, book, "INV-103", "DISCOUNT")
+    assert (len(rail.reminders), rail.invoices) == leidas and book.rejected == {}  # nothing touched
+    book.reject(next(iter(book.pending)), "owner")
+    real = demo.situacion(rail, "r1", SENALES_ENSAYO, book).plan
+    assert previsto.p_short == real.p_short and previsto.p_short > antes.plan.p_short
+    assert [d.action for d in previsto.decisions] == [d.action for d in real.decisions]
+
+
 def test_new_evidence_needs_a_new_approval(setup):
     rail, libro, book = setup
     run(rail, libro, book)

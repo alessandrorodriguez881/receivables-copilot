@@ -11,7 +11,7 @@
 **In numbers** (details and honest misses below):
 - **Measured, not just demoed.** Over 1,000 simulated weeks against PayPal-style fixed reminders, it sent a third of the reminders (1.3 a week against 3.4) and never chased a customer who was disputing or had confirmed payment; the fixed schedule did in about a quarter and almost half of the weeks. On the two latest fresh seeds it was short on payday less often (1.3 points fewer, clearly, and 0.4, within noise). It is not cheaper: the difference is within noise.
 - **Checked on 4,995 real business invoices:** its on-time odds were right to within 2.6 points on average.
-- **97 offline tests, run on every push,** including one for each trap in the table below.
+- **98 offline tests, run on every push,** including one for each trap in the table below.
 - **AG Grid and AG Studio:** the worklist is an AG Grid, and in the AG Studio dashboard our own widgets and AG Studio's charts cross-filter together, our Collections analyst agent hands the building to AG Studio's built-in agents, and everything updates in place when a payment lands in PayPal.
 
 Freelancers and small studios get paid through PayPal invoices, and payroll does not wait for late customers. PayPal's automatic reminders treat every customer the same. Receivables Copilot looks at each open invoice, works out the chance that the money arrives before payday, and picks one action per invoice:
@@ -244,7 +244,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`; `ejecutar_plan.py --correo`; `aprobar.py` to list the cards and `aprobar.py <code>` to approve one; `ejecutar_plan.py` to act on what you approved; then `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 97 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 98 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
 
 ## Use of AI
 
