@@ -324,7 +324,7 @@ elif hecho := st.session_state.get("hecho"):
             clientes = set(DOMINIOS.values())
             for m in BANDEJA:
                 if m["from"].rsplit("@", 1)[-1] not in clientes:
-                    st.markdown(f":red[:material/block:] `{m['id']}` from {plano(m['from'])} → not used: not sent from "
+                    st.markdown(f":red[:material/block:] `{m['id']}` from `{m['from']}` → not used: not sent from "
                                 "a customer's domain, and no tool can mark an invoice paid")
         a = hecho["antes"]
         if a is not None and hecho["paso"] in ("2", "3") and (
