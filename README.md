@@ -11,7 +11,7 @@
 **In numbers** (details and honest misses below):
 - **Measured, not just demoed.** Over 1,000 simulated weeks against PayPal-style fixed reminders, it sent a third of the reminders (1.3 a week against 3.4) and never chased a customer who was disputing or had confirmed payment; the fixed schedule did in about a quarter and almost half of the weeks. On the two latest fresh seeds it was short on payday less often (1.3 points fewer, clearly, and 0.4, within noise). It is not cheaper: the difference is within noise.
 - **Checked on 4,995 real business invoices:** its on-time odds were right to within 2.6 points on average.
-- **98 offline tests, run on every push,** including one for each trap in the table below.
+- **99 offline tests, run on every push,** including one for each trap in the table below.
 - **AG Grid and AG Studio:** the worklist is an AG Grid, and in the AG Studio dashboard our own widgets and AG Studio's charts cross-filter together, our Collections analyst agent hands the building to AG Studio's built-in agents, and everything updates in place when a payment lands in PayPal.
 
 Freelancers and small studios get paid through PayPal invoices, and payroll does not wait for late customers. PayPal's automatic reminders treat every customer the same. Receivables Copilot looks at each open invoice, works out the chance that the money arrives before payday, and picks one action per invoice:
@@ -57,7 +57,7 @@ Northbeam Studio (fictional) has $3,500 in cash and a $10,500 payroll in 7 days.
 2. **Customer replies arrive.**
    - Litware disputes its invoice, so it goes to a person.
    - Contoso confirms it will pay on Friday, so the agent stops chasing that invoice.
-   - A fake "Fabrikam finance" email from a look-alike domain asks to mark an invoice as paid and stop the reminders. It is ignored: it is not from Fabrikam's domain, and no tool can mark invoices paid.
+   - A fake "Fabrikam finance" email from a look-alike domain says an invoice is already paid and asks to mark it paid and stop the reminders. Claude checks the invoice in PayPal (still open, $8,000 due, no payment recorded) and ignores the email: it is not from Fabrikam's domain, and no tool can mark invoices paid.
 3. **The plan changes.**
    - A 2% early-payment discount for Fabrikam's $8,000 invoice. That is $160, above the $150 the agent may give on its own, so **it asks the owner first**.
    - A reminder for Contoso's overdue invoice.
@@ -102,6 +102,7 @@ It starts from the policy's assumptions and moves only as far as the evidence pu
 | Claude (through typed tools) | Code |
 |---|---|
 | Reads customer replies and records what they mean (dispute, confirmation, asking for time) with the exact quote | Which invoices to chase, discounts, limits, approvals, duplicate protection |
+| Checks an invoice in PayPal when a reply claims it is paid (`check_invoice_in_paypal`: status, amount due and payments recorded, read-only) | What Claude may read: only this studio's invoices, and no PayPal ids or customer data |
 | Writes the reminder text and explains the plan | The effect of each signal on the odds (fixed in policy) |
 
 A reply only counts if all of these hold:
@@ -148,7 +149,7 @@ AG Studio is commercial software: without a license key it logs a license notice
 
 | Trap | What happens | Test |
 |---|---|---|
-| A look-alike "Fabrikam finance" email asks to mark an invoice paid and stop reminders | Ignored: wrong domain, and no tool can mark paid or stop reminders | `test_the_fake_fabrikam_email_cannot_mark_anything_or_count`, `test_no_tool_can_mark_paid_or_stop_reminders` |
+| A look-alike "Fabrikam finance" email asks to mark an invoice paid and stop reminders | Ignored: wrong domain, and no tool can mark paid or stop reminders. Claude checks PayPal instead, read-only | `test_the_fake_fabrikam_email_cannot_mark_anything_or_count`, `test_no_tool_can_mark_paid_or_stop_reminders`, `test_claude_can_read_an_invoice_in_paypal_and_nothing_else` |
 | A customer disputes an invoice | No reminder, no discount: a person decides | `test_after_the_replies_a_dispute_goes_to_a_person_and_a_promise_is_respected` |
 | A customer already promised a date | It stops chasing that invoice | `test_copilot_reading_replies_never_presses_a_dispute_or_a_promise` |
 | A customer asks for more time (with payment plans turned on) | No reminder, no discount: a payment plan the owner approves, and the PayPal invoice accepts partial payments | `test_a_customer_who_asks_for_time_gets_a_payment_plan_in_paypal` |
@@ -244,7 +245,7 @@ In the sidebar:
 
 The same steps exist on the command line: `preparar_facturas.py`; `ejecutar_plan.py --correo`; `aprobar.py` to list the cards and `aprobar.py <code>` to approve one; `ejecutar_plan.py` to act on what you approved; then `ejecutar_plan.py --paga INV-103`.
 
-Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 98 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
+Tests (offline, no keys): `python -m pytest tests motor_comun/tests` (the app and the shared engine, 99 tests; GitHub Actions runs them on every push). The engine lives in `motor_comun/`.
 
 ## Use of AI
 

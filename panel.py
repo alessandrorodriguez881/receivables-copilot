@@ -21,8 +21,8 @@ import streamlit as st
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 import preparar_facturas
-from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, nota_descuento,
-                  nota_plan, paso_siguiente, plan_si_rechaza, situacion, tarjeta_descuento,
+from demo import (APROBACIONES, CONCEPTO, ENV, POLICY, cambios, cobrado_en_paypal, cobro, ejecutar, en_paypal,
+                  nota_descuento, nota_plan, paso_siguiente, plan_si_rechaza, situacion, tarjeta_descuento,
                   tarjeta_plan)
 from escenario import (BANDEJA, CAJA_INICIAL, DATA, DOMINIOS, ESTUDIO, FACTURAS, NECESIDADES, ORIGEN_HISTORIAL,
                        HISTORIAL_MODELO, POR_CLIENTE, SENALES_ENSAYO, facturas_de, guardar_notas, guardar_senales,
@@ -139,7 +139,7 @@ def leer(log) -> None:
         return
     import anthropic
     from agente_ia import GRABAR, Bandeja, cliente, guardar_grabacion, leer_bandeja, repetir_grabacion, resumen
-    bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss, book)))
+    bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss, book)), lambda iid: en_paypal(rail, ronda, iid))
     if con_claude():
         try:
             st.session_state.resumen_ia = leer_bandeja(cliente(ENV), bandeja)
@@ -165,7 +165,8 @@ def actuar(log) -> None:
 
 
 def paga_fabrikam(log) -> None:
-    """El cliente paga en PayPal. El agente no se entera por este botón: lo ve al mirar PayPal (`vigilar_cobros`)."""
+    """Sandbox: este botón hace de cliente y apunta su pago en la factura (no se mueve dinero). El agente no se entera
+    por el botón: lo ve al mirar PayPal (`vigilar_cobros`)."""
     cobro(rail, libro, ronda, "INV-103", log)
 
 

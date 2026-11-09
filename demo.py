@@ -239,6 +239,20 @@ def aplicar_descuento(rail: PayPalRail, libro: Ledger, book: ApprovalBook, d, pi
         f"{float(nueva.get('due_amount', nueva.get('amount', {})).get('value', 0)):,.2f} USD (until {hasta})")
 
 
+def en_paypal(rail: PayPalRail, ronda: str, iid: str) -> dict:
+    """Lo que PayPal dice ahora de una factura de la ronda: lo único que ve la herramienta de solo lectura de Claude
+    (`check_invoice_in_paypal`). Ni ids de PayPal ni datos del cliente: estado, lo que falta y los pagos apuntados."""
+    pid = facturas_de(ronda).get(iid)
+    if not pid:
+        return {"invoice": iid, "status": "NOT_IN_PAYPAL_THIS_ROUND"}
+    f = rail.get_invoice(pid)
+    pagos = f.get("payments") or {}
+    return {"invoice": iid, "status": f.get("status"),
+            "amount_due": f"${float((f.get('due_amount') or {}).get('value', 0)):,.2f}",
+            "paid_so_far": f"${float((pagos.get('paid_amount') or {}).get('value', 0)):,.2f}",
+            "payments_recorded": len(pagos.get("transactions") or [])}
+
+
 def cobro(rail: PayPalRail, libro: Ledger, ronda: str, iid: str, log=print) -> float:
     """Sandbox: hace de cliente que paga lo que debe hoy (un pago externo registrado en la factura)."""
     pid = facturas_de(ronda).get(iid)

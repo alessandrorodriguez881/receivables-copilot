@@ -15,7 +15,7 @@ import argparse
 from datetime import date
 import sys
 
-from demo import (APROBACIONES, ENV, cambios, cobro, ejecutar, mostrar, situacion)
+from demo import (APROBACIONES, ENV, cambios, cobro, ejecutar, en_paypal, mostrar, situacion)
 from escenario import DATA, SENALES_ENSAYO, guardar_notas, guardar_senales, notas_de, ronda_actual, senales_de
 from modo import SIMULADO, conectar
 from rail_paypal import PayPalError
@@ -38,7 +38,8 @@ def main() -> int:
     if args.correo and senales is None:
         try:
             from agente_ia import GRABAR, Bandeja, SinClave, cliente, guardar_grabacion, leer_bandeja, resumen
-            bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss, book)))
+            bandeja = Bandeja(lambda ss: resumen(situacion(rail, ronda, ss, book)),
+                              lambda iid: en_paypal(rail, ronda, iid))
             explicacion = leer_bandeja(cliente(ENV), bandeja)
             if GRABAR:
                 guardar_grabacion(bandeja, explicacion, date.today())
