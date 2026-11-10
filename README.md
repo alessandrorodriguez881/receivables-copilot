@@ -2,7 +2,7 @@
 
 **A collections agent for PayPal invoices that decides who to chase, how, and when to ask you first.** Built for the PayPal AI Hackathon.
 
-**Demo video (2:59):** https://youtu.be/CGlhuuBnylY
+**Demo video (2:41):** https://youtu.be/wJM094g5I44
 
 **Live demo, no keys needed:** https://receivables-copilot-demo.streamlit.app (each visitor gets their own round; if nobody has opened it for a while, click "Yes, get this app back up!" and wait about 30 seconds)
 
